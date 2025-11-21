@@ -121,3 +121,39 @@ button:hover {
 .toggle-btn:hover {
   background: rgba(255, 255, 255, 0.1);
 }
+
+.search-page {
+  width: 90%;
+  max-width: 800px;
+  margin: 20px auto;
+  text-align: center;
+  color: white;
+}
+
+.nav-buttons {
+  margin-bottom: 20px;
+}
+
+.nav-buttons button {
+  width: 150px;
+  margin-bottom: 10px;
+}
+
+.results {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 20px;
+}
+
+.search-results {
+  max-height: 60vh;      /* keeps results scrollable */
+  overflow-y: auto;
+  padding-right: 10px;
+}
+
+.anime-card {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 10px;
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+}
