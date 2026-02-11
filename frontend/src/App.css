@@ -1,0 +1,213 @@
+body,
+html {
+  margin: 0;
+  padding: 0;
+  font-family: 'Poppins', sans-serif;
+  overflow: hidden;
+  height: 100%;
+}
+
+/* BACKGROUND */
+.anime-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  background-image: url("./assets/8650497-anime-collage-aesthetic-wallpaper.jpg");
+  background-size: cover;
+  background-position: center;
+  filter: blur(4px) brightness(0.85);
+  z-index: -2;
+}
+
+/* OVERLAY */
+.bg-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.25);
+  z-index: -1;
+}
+
+/* SAKURA PETALS */
+.sakura {
+  position: fixed;
+  top: -50px;
+  background-size: cover;
+  /* fills the div */
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+
+/* ANIMATION */
+@keyframes fall {
+  0% {
+    transform: translateY(0);
+  }
+
+  100% {
+    transform: translateY(110vh);
+  }
+}
+
+@keyframes drift {
+  0% {
+    transform: translateX(0);
+  }
+
+  50% {
+    transform: translateX(15px);
+  }
+
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes rotate {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* LOGIN BOX */
+.login-container {
+  width: 380px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 40px;
+  border-radius: 16px;
+  margin: auto;
+  margin-top: 80px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 0 25px rgba(162, 0, 255, 0.35);
+  text-align: center;
+  color: white;
+}
+
+.login-container h1 {
+  font-size: 32px;
+  margin-bottom: 10px;
+}
+
+.login-container p {
+  color: #ddd;
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+input {
+  width: 90%;
+  padding: 12px;
+  margin: 10px 0;
+  border-radius: 8px;
+  border: none;
+  outline: none;
+}
+
+button {
+  margin-top: 10px;
+  padding: 12px 20px;
+  width: 80%;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  background: #a200ff;
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 0 10px rgba(162, 0, 255, 0.5);
+  transition: 0.3s;
+}
+
+button:hover {
+  background: #d900ff;
+  box-shadow: 0 0 20px rgba(217, 0, 255, 0.8);
+}
+
+.toggle-btn {
+  background: transparent;
+  border: 1px solid #ccc;
+  margin-top: 15px;
+  color: white;
+}
+
+.toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.search-page {
+  width: 90%;
+  max-width: 800px;
+  margin: 20px auto;
+  text-align: center;
+  color: white;
+}
+
+.nav-buttons {
+  margin-bottom: 10px;
+}
+
+.nav-buttons button {
+  padding: 8px 16px;
+  margin-bottom: 10px;
+  background: #a200ff;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(162, 0, 255, 0.5);
+}
+
+.nav-buttons button:hover {
+  background: #d900ff;
+  box-shadow: 0 0 20px rgba(217, 0, 255, 0.8);
+}
+
+.results {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 20px;
+}
+
+.search-results {
+  max-height: 60vh;
+  /* keeps results scrollable */
+  overflow-y: auto;
+  padding-right: 10px;
+}
+
+.anime-card {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 10px;
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+}
+
+.suggestions {
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  border-radius: 8px;
+  margin-top: 5px;
+  max-height: 150px;
+  overflow-y: auto;
+  position: absolute;
+  width: 90%;
+  /* match your input width */
+  z-index: 10;
+}
+
+.suggestions div {
+  padding: 8px;
+  cursor: pointer;
+}
+
+.suggestions div:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
