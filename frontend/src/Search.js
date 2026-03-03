@@ -17,7 +17,7 @@ function Search() {
     }
 
     try {
-      const res = await fetch(`http://localhost:5000/api/search?q=${value}`);
+      const res = await fetch(`http://localhost:5000/search?q=${value}`);
       const data = await res.json();
 
       // Backend returns array directly
@@ -39,7 +39,7 @@ function Search() {
     if (!query) return;
 
     try {
-      const res = await fetch(`http://localhost:5000/api/search?q=${query}`);
+      const res = await fetch(`http://localhost:5000/search?q=${query}`);
       const data = await res.json();
 
       // Backend returns array directly

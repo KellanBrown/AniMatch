@@ -8,16 +8,12 @@ const db = require("./database");
 app.use(cors());
 app.use(express.json());
 
-// ------------------------
-// Root route
-// ------------------------
+// Root
 app.get("/", (req, res) => {
   res.send("AniMatch backend is running!");
 });
 
-// ------------------------
 // Dashboard
-// ------------------------
 app.get("/dashboard/:username", (req, res) => {
   const { username } = req.params;
   const query = `SELECT username, email, age, gender FROM users WHERE username = ?`;
@@ -25,45 +21,40 @@ app.get("/dashboard/:username", (req, res) => {
   db.get(query, [username], (err, user) => {
     if (err) return res.status(500).json({ message: "Database error." });
     if (!user) return res.status(404).json({ message: "User not found." });
-
     res.json({ user, recommendations: [] });
   });
 });
 
-// ------------------------
 // Signup
-// ------------------------
 app.post("/signup", async (req, res) => {
   const { username, email, age, gender, password } = req.body;
-  if (!username || !email || !age || !gender || !password) {
-    return res.status(400).json({ message: "All fields are required." });
-  }
+  if (!username || !email || !age || !gender || !password)
+    return res.status(400).json({ message: "All fields required." });
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const query = `
-    INSERT INTO users (username, email, age, gender, passwordHash)
-    VALUES (?, ?, ?, ?, ?)
-  `;
-  db.run(query, [username, email, age, gender, passwordHash], function (err) {
-    if (err) {
-      if (err.message.includes("UNIQUE")) {
-        return res.status(400).json({ message: "User already exists." });
+
+  db.run(
+    `INSERT INTO users (username, email, age, gender, passwordHash)
+     VALUES (?, ?, ?, ?, ?)`,
+    [username, email, age, gender, passwordHash],
+    function (err) {
+      if (err) {
+        if (err.message.includes("UNIQUE"))
+          return res.status(400).json({ message: "User exists." });
+        return res.status(500).json({ message: "Database error." });
       }
-      return res.status(500).json({ message: "Database error." });
+      res.json({ message: `Signup successful! Welcome, ${username}` });
     }
-    res.json({ message: `Signup successful! Welcome, ${username}` });
-  });
+  );
 });
 
-// ------------------------
 // Login
-// ------------------------
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ message: "Username and password required." });
+  if (!username || !password)
+    return res.status(400).json({ message: "Username and password required." });
 
-  const query = `SELECT * FROM users WHERE username = ?`;
-  db.get(query, [username], async (err, user) => {
+  db.get(`SELECT * FROM users WHERE username = ?`, [username], async (err, user) => {
     if (err) return res.status(500).json({ message: "Database error." });
     if (!user) return res.status(401).json({ message: "Invalid credentials." });
 
@@ -74,12 +65,9 @@ app.post("/login", async (req, res) => {
   });
 });
 
-// ------------------------
 // Recommendations
-// ------------------------
 app.post("/recommend", async (req, res) => {
-  const { genres, maxEpisodes, hiddenGem, mood } = req.body;
-  if (!genres || genres.length === 0) return res.status(400).json({ error: "Genres required" });
+  const { genres, maxEpisodes, hiddenGem } = req.body;
 
   const genreMap = {
     Action: 1,
@@ -93,86 +81,132 @@ app.post("/recommend", async (req, res) => {
   };
 
   try {
-    const results = [];
+    let results = [];
 
     for (const g of genres) {
       const genreId = genreMap[g];
       if (!genreId) continue;
 
       const response = await axios.get("https://api.jikan.moe/v4/anime", {
-        params: {
-          genres: genreId,
-          limit: 25, // max allowed by Jikan
-          order_by: "popularity",
-          sort: "asc"
-        }
+        params: { genres: genreId, limit: 25 }
       });
 
-      if (Array.isArray(response.data.data)) {
-        results.push(...response.data.data);
-      }
+      results.push(...response.data.data);
     }
 
-    // Remove duplicates
-    const uniqueResults = Array.from(new Map(results.map(a => [a.mal_id, a])).values());
+    const unique = Array.from(new Map(results.map(a => [a.mal_id, a])).values());
 
-    let filtered = uniqueResults;
+    let filtered = unique;
 
-    // Episode filter
     if (maxEpisodes) {
-      filtered = filtered.filter(a => Number.isInteger(a.episodes) && a.episodes > 0 && a.episodes <= maxEpisodes);
-    }
-
-    // Hidden gem filter
-    if (hiddenGem) {
-      filtered = filtered.filter(
-        a =>
-          a.members &&
-          a.popularity &&
-          a.score &&
-          a.score >= 7 &&
-          a.popularity > 3000 &&
-          a.members < 250000
+      filtered = filtered.filter(a =>
+        Number.isInteger(a.episodes) &&
+        a.episodes > 0 &&
+        a.episodes <= maxEpisodes
       );
     }
 
-    // Mood-based filtering (optional)
-    if (mood) {
-      const moodMap = {
-        Excited: ["Action", "Adventure", "Comedy"],
-        Chill: ["Slice of Life", "Romance", "Drama"],
-        Adventurous: ["Fantasy", "Action", "Adventure"],
-        Romantic: ["Romance", "Drama", "Fantasy"],
-        Sad: ["Drama", "Slice of Life"],
-        Comedic: ["Comedy", "Fantasy"]
-      };
-      const moodGenres = moodMap[mood] || [];
-      filtered = filtered.filter(a => moodGenres.some(g => a.genres?.some(ag => ag.name === g)));
+    if (hiddenGem) {
+      filtered = filtered.filter(a =>
+        a.score >= 7 &&
+        a.members < 250000
+      );
     }
 
-    // Map + limit to 12
-    const finalResults = filtered
-      .slice(0, 12)
-      .map(anime => ({
-        id: anime.mal_id,
-        title: anime.title_english || anime.title,
-        image: anime.images?.jpg?.image_url || "",
-        rating: anime.score || "N/A",
-        url: anime.url,
-        episodes: anime.episodes
-      }));
+    const finalResults = filtered.slice(0, 12).map(anime => ({
+      id: anime.mal_id,
+      title: anime.title_english || anime.title,
+      image: anime.images?.jpg?.image_url || "",
+      rating: anime.score || "N/A",
+      url: anime.url,
+      episodes: anime.episodes
+    }));
 
     res.json(finalResults);
-  } catch (err) {
-    console.error("❌ Recommendation error:", err.response?.data || err.message);
+
+  } catch (error) {
+    console.error("Recommendation error:", error.response?.data || error.message);
     res.status(500).json({ error: "Recommendation failed" });
   }
 });
 
-// ------------------------
-// START SERVER
-// ------------------------
+// Similar Anime
+app.get("/similar/:id", async (req, res) => {
+  try {
+    const animeId = req.params.id;
+
+    const response = await axios.get(
+      `https://api.jikan.moe/v4/anime/${animeId}/recommendations`
+    );
+
+    const recommendations = response.data.data.slice(0, 6);
+
+    const detailedResults = [];
+
+    for (const item of recommendations) {
+      try {
+        const detailResponse = await axios.get(
+          `https://api.jikan.moe/v4/anime/${item.entry.mal_id}`
+        );
+
+        const anime = detailResponse.data.data;
+
+        detailedResults.push({
+          id: anime.mal_id,
+          title: anime.title_english || anime.title,
+          image: anime.images?.jpg?.image_url || "",
+          rating: anime.score || "N/A",
+          episodes: anime.episodes,
+          url: anime.url
+        });
+
+      } catch (innerError) {
+        console.log("Skipped one anime due to rate limit.");
+      }
+    }
+
+    res.json(detailedResults);
+
+  } catch (error) {
+    console.error("Similar error:", error.response?.data || error.message);
+    res.status(500).json({ error: "Failed to fetch similar anime" });
+  }
+});
+
+// Search Anime
+app.get("/search", async (req, res) => {
+  try {
+    const query = req.query.q;
+
+    if (!query) {
+      return res.status(400).json({ error: "Search query required" });
+    }
+
+    const response = await axios.get("https://api.jikan.moe/v4/anime", {
+      params: {
+        q: query,
+        limit: 12
+      }
+    });
+
+    const results = response.data.data.map(anime => ({
+      id: anime.mal_id,
+      title: anime.title_english || anime.title,
+      image: anime.images?.jpg?.image_url || "",
+      rating: anime.score || "N/A",
+      episodes: anime.episodes,
+      url: anime.url
+    }));
+
+    res.json(results);
+
+  } catch (error) {
+    console.error("Search error:", error.response?.data || error.message);
+    res.status(500).json({ error: "Search failed" });
+  }
+});
+
 const PORT = 5000;
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`✅ Server running on http://localhost:${PORT}`);
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
 });
