@@ -2,11 +2,15 @@ const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
 const axios = require("axios");
+const path = require("path");
+const db = require("./database"); // your SQLite database
+
 const app = express();
-const db = require("./database");
 
 app.use(cors());
 app.use(express.json());
+
+// ------------------- API ROUTES -------------------
 
 // Root
 app.get("/", (req, res) => {
@@ -87,11 +91,14 @@ app.post("/recommend", async (req, res) => {
       const genreId = genreMap[g];
       if (!genreId) continue;
 
-      const response = await axios.get("https://api.jikan.moe/v4/anime", {
-        params: { genres: genreId, limit: 25 }
-      });
-
-      results.push(...response.data.data);
+      try {
+        const response = await axios.get("https://api.jikan.moe/v4/anime", {
+          params: { genres: genreId, limit: 25 }
+        });
+        results.push(...response.data.data);
+      } catch (err) {
+        console.log(`Skipped genre ${g} due to API issue.`);
+      }
     }
 
     const unique = Array.from(new Map(results.map(a => [a.mal_id, a])).values());
@@ -122,11 +129,10 @@ app.post("/recommend", async (req, res) => {
       episodes: anime.episodes
     }));
 
-    res.json(finalResults);
-
+    res.json(finalResults || []);
   } catch (error) {
-    console.error("Recommendation error:", error.response?.data || error.message);
-    res.status(500).json({ error: "Recommendation failed" });
+    console.error("Recommendation error:", error.message);
+    res.json([]);
   }
 });
 
@@ -134,23 +140,15 @@ app.post("/recommend", async (req, res) => {
 app.get("/similar/:id", async (req, res) => {
   try {
     const animeId = req.params.id;
-
-    const response = await axios.get(
-      `https://api.jikan.moe/v4/anime/${animeId}/recommendations`
-    );
+    const response = await axios.get(`https://api.jikan.moe/v4/anime/${animeId}/recommendations`);
 
     const recommendations = response.data.data.slice(0, 6);
 
     const detailedResults = [];
-
     for (const item of recommendations) {
       try {
-        const detailResponse = await axios.get(
-          `https://api.jikan.moe/v4/anime/${item.entry.mal_id}`
-        );
-
+        const detailResponse = await axios.get(`https://api.jikan.moe/v4/anime/${item.entry.mal_id}`);
         const anime = detailResponse.data.data;
-
         detailedResults.push({
           id: anime.mal_id,
           title: anime.title_english || anime.title,
@@ -159,14 +157,12 @@ app.get("/similar/:id", async (req, res) => {
           episodes: anime.episodes,
           url: anime.url
         });
-
       } catch (innerError) {
         console.log("Skipped one anime due to rate limit.");
       }
     }
 
     res.json(detailedResults);
-
   } catch (error) {
     console.error("Similar error:", error.response?.data || error.message);
     res.status(500).json({ error: "Failed to fetch similar anime" });
@@ -177,16 +173,10 @@ app.get("/similar/:id", async (req, res) => {
 app.get("/search", async (req, res) => {
   try {
     const query = req.query.q;
-
-    if (!query) {
-      return res.status(400).json({ error: "Search query required" });
-    }
+    if (!query) return res.status(400).json({ error: "Search query required" });
 
     const response = await axios.get("https://api.jikan.moe/v4/anime", {
-      params: {
-        q: query,
-        limit: 12
-      }
+      params: { q: query, limit: 12 }
     });
 
     const results = response.data.data.map(anime => ({
@@ -199,14 +189,21 @@ app.get("/search", async (req, res) => {
     }));
 
     res.json(results);
-
   } catch (error) {
     console.error("Search error:", error.response?.data || error.message);
     res.status(500).json({ error: "Search failed" });
   }
 });
 
-const PORT = 5000;
+// ------------------- SERVE REACT FRONTEND -------------------
+app.use(express.static(path.join(__dirname, "../frontend/build")));
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../frontend/build", "index.html"));
+});
+
+// ------------------- START SERVER -------------------
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });

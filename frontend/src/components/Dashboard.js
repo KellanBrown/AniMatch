@@ -13,7 +13,7 @@ function Dashboard() {
       return;
     }
 
-    fetch(`http://localhost:5000/dashboard/${username}`)
+    fetch(`/dashboard/${username}`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to fetch dashboard");
         return res.json();

@@ -7,7 +7,7 @@ export default function SearchComponent() {
 
     const searchAnime = async () => {
         const response = await axios.get(
-            `http://localhost:5000/api/search?q=${query}`
+           `/search?q=${query}`
         );
         setResults(response.data.data);
     };

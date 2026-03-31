@@ -23,15 +23,12 @@ function Recommendations() {
       if (["Excited", "Chill", "Adventurous", "Romantic", "Sad", "Comedic"].includes(answer)) {
         mood = answer;
       }
-
       if (["Action", "Comedy", "Fantasy", "Romance", "Drama", "Horror", "SciFi"].includes(answer)) {
         genres.push(answer);
       }
-
       if (answer.includes("Short")) maxEpisodes = 25;
       if (answer.includes("Medium")) maxEpisodes = 50;
       if (answer.includes("Long")) maxEpisodes = 100;
-
       if (answer === "Hidden Gems") hiddenGem = true;
     });
 
@@ -39,7 +36,7 @@ function Recommendations() {
 
     const fetchRecommendations = async () => {
       try {
-        const res = await fetch("http://localhost:5000/recommend", {
+        const res = await fetch("/recommend", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ mood, genres, maxEpisodes, hiddenGem })
@@ -47,13 +44,13 @@ function Recommendations() {
 
         const data = await res.json();
 
-        // Initialize stack with first recommendation set
         setRecommendationStack([
           {
             title: "Your Anime Recommendations",
-            data: data
+            data: Array.isArray(data) ? data : []
           }
         ]);
+
       } catch (err) {
         console.error(err);
       } finally {
@@ -64,44 +61,38 @@ function Recommendations() {
     fetchRecommendations();
   }, [answers]);
 
-const fetchSimilar = async (animeId, animeTitle) => {
-  try {
-    setSimilarLoading(true);
+  const fetchSimilar = async (animeId, animeTitle) => {
+    try {
+      setSimilarLoading(true);
 
-    const res = await fetch(`http://localhost:5000/similar/${animeId}`);
-    const data = await res.json();
+      // ✅ FIXED HERE (no localhost)
+      const res = await fetch(`/similar/${animeId}`);
+      const data = await res.json();
 
-    // 🔥 Normalize the structure
-    const normalizedData = data.map(anime => ({
-      id: anime.id || anime.mal_id,
-      title: anime.title,
-      image: anime.image || anime.images?.jpg?.image_url,
-      rating: anime.rating || anime.score,
-      episodes: anime.episodes,
-      url: anime.url
-    }));
+      const normalizedData = (Array.isArray(data) ? data : []).map(anime => ({
+        id: anime.id || anime.mal_id,
+        title: anime.title,
+        image: anime.image || anime.images?.jpg?.image_url,
+        rating: anime.rating || anime.score,
+        episodes: anime.episodes,
+        url: anime.url
+      }));
 
-    setRecommendationStack(prev => [
-      ...prev,
-      {
-        title: `Because you liked ${animeTitle}...`,
-        data: normalizedData
-      }
-    ]);
+      setRecommendationStack(prev => [
+        ...prev,
+        { title: `Because you liked ${animeTitle}...`, data: normalizedData }
+      ]);
 
-    setTimeout(() => {
-      window.scrollTo({
-        top: document.body.scrollHeight,
-        behavior: "smooth"
-      });
-    }, 200);
+      setTimeout(() => {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+      }, 200);
 
-  } catch (err) {
-    console.error(err);
-  } finally {
-    setSimilarLoading(false);
-  }
-};
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSimilarLoading(false);
+    }
+  };
 
   if (!answers) return <p>Please take the quiz first.</p>;
   if (loading) return <p>Loading recommendations...</p>;
@@ -135,7 +126,7 @@ const fetchSimilar = async (animeId, animeTitle) => {
               marginTop: "20px"
             }}
           >
-            {section.data.map(anime => (
+            {(Array.isArray(section.data) ? section.data : []).map(anime => (
               <AnimeCard
                 key={`${anime.id}-${index}`}
                 anime={anime}

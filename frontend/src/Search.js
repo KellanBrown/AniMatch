@@ -7,24 +7,28 @@ function Search() {
   const [suggestions, setSuggestions] = useState([]);
   const navigate = useNavigate();
 
-  // Autocomplete
-  const handleInput = async (e) => {
+  let debounceTimer;
+
+  const handleInput = (e) => {
     const value = e.target.value;
     setQuery(value);
+
+    clearTimeout(debounceTimer);
+
     if (value.length < 2) {
       setSuggestions([]);
       return;
     }
 
-    try {
-      const res = await fetch(`http://localhost:5000/search?q=${value}`);
-      const data = await res.json();
-
-      // Backend returns array directly
-      if (Array.isArray(data)) setSuggestions(data.slice(0, 5));
-    } catch (err) {
-      console.error("Error fetching suggestions:", err);
-    }
+    debounceTimer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/search?q=${value}`);
+        const data = await res.json();
+        if (Array.isArray(data)) setSuggestions(data.slice(0, 5));
+      } catch (err) {
+        console.error("Error fetching suggestions:", err);
+      }
+    }, 400);
   };
 
   const handleSelect = (title) => {
@@ -32,17 +36,14 @@ function Search() {
     setSuggestions([]);
   };
 
-  // Full search
   const handleSearch = async (e) => {
     e.preventDefault();
     setSuggestions([]);
     if (!query) return;
 
     try {
-      const res = await fetch(`http://localhost:5000/search?q=${query}`);
+      const res = await fetch(`/search?q=${query}`);
       const data = await res.json();
-
-      // Backend returns array directly
       if (Array.isArray(data)) setResults(data);
     } catch (err) {
       console.error("Error fetching search results:", err);
@@ -50,11 +51,36 @@ function Search() {
   };
 
   return (
-    <div style={{ paddingBottom: "50px" }}>
-      <h1>Search Anime</h1>
-      <button onClick={() => navigate("/dashboard")}>🏠 Profile</button>
+    <div style={{ padding: "40px", maxWidth: "1000px", margin: "auto" }}>
+      
+      {/* 🔥 Header */}
+      <h1
+        style={{
+          background: "linear-gradient(90deg, #7c3aed, #ec4899)",
+          WebkitBackgroundClip: "text",
+          color: "transparent",
+          fontSize: "36px",
+          marginBottom: "10px"
+        }}
+      >
+        AniMatch 🎌
+      </h1>
 
-      <form onSubmit={handleSearch} style={{ marginTop: "10px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h2 style={{ margin: 0 }}>Search Anime</h2>
+        <button onClick={() => navigate("/dashboard")}>🏠 Profile</button>
+      </div>
+
+      {/* 🔥 Search Bar */}
+      <form
+        onSubmit={handleSearch}
+        style={{
+          marginTop: "20px",
+          display: "flex",
+          gap: "10px",
+          alignItems: "center"
+        }}
+      >
         <input
           type="text"
           placeholder="Search for an anime..."
@@ -62,21 +88,21 @@ function Search() {
           onChange={handleInput}
           autoComplete="off"
           required
-          style={{ padding: "5px", width: "300px" }}
+          style={{ padding: "8px", width: "100%" }}
         />
-        <button type="submit" style={{ marginLeft: "5px", padding: "5px 10px" }}>
-          Search
-        </button>
+
+        <button type="submit">Search</button>
       </form>
 
-      {/* Autocomplete Suggestions */}
+      {/* 🔥 Suggestions */}
       {suggestions.length > 0 && (
-        <div style={{ marginTop: "10px" }}>
+        <div className="suggestions">
           {suggestions.map((anime) => (
             <div
-              key={anime.mal_id}
+              key={anime.id}
               onClick={() => handleSelect(anime.title)}
-              style={{ cursor: "pointer", padding: "3px 0" }}
+              className="suggestion-item"
+              style={{ padding: "8px", cursor: "pointer" }}
             >
               {anime.title}
             </div>
@@ -84,68 +110,40 @@ function Search() {
         </div>
       )}
 
-      {/* Search Results */}
+      {/* 🔥 Results */}
       <div
         style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "10px",
-          maxHeight: "70vh",
-          overflowY: "auto",
-          marginTop: "20px",
-          paddingBottom: "20px",
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+          gap: "20px",
+          marginTop: "30px"
         }}
       >
         {results.length === 0 ? (
           <p>No results yet...</p>
         ) : (
           results.map((anime) => (
-            <div
-              key={anime.id}
-              style={{
-                border: "1px solid #ccc",
-                borderRadius: "10px",
-                width: "220px",
-                textAlign: "center",
-                boxShadow: "2px 2px 10px rgba(0,0,0,0.1)",
-                backgroundColor: "#f8f8f8",
-                flexShrink: 0,
-                padding: "10px",
-              }}
-            >
+            <div key={anime.id} className="card">
               <a href={anime.url} target="_blank" rel="noreferrer">
-                {anime.image ? (
-                  <img
-                    src={anime.image}
-                    alt={anime.title}
-                    style={{
-                      width: "200px",
-                      height: "280px",
-                      objectFit: "cover",
-                      borderRadius: "8px",
-                      cursor: "pointer",
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: "200px",
-                      height: "280px",
-                      backgroundColor: "#ddd",
-                      borderRadius: "8px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      cursor: "pointer",
-                    }}
-                  >
-                    No Image
-                  </div>
-                )}
+                <img
+                  src={anime.image}
+                  alt={anime.title}
+                  style={{
+                    width: "100%",
+                    height: "260px",
+                    objectFit: "cover",
+                    borderRadius: "8px"
+                  }}
+                />
               </a>
 
-              <h3 style={{ fontSize: "16px", margin: "5px 0" }}>{anime.title}</h3>
-              <p style={{ margin: "3px 0" }}>MAL Score: {anime.rating || "N/A"}</p>
+              <h3 style={{ fontSize: "14px", marginTop: "8px" }}>
+                {anime.title}
+              </h3>
+
+              <p style={{ fontSize: "12px", opacity: 0.8 }}>
+                ⭐ {anime.rating || "N/A"}
+              </p>
             </div>
           ))
         )}

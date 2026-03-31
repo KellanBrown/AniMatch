@@ -7,39 +7,29 @@ function Login() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    console.log("Login button clicked"); // ✅ Debug log
 
     try {
-      console.log("Sending fetch to backend with username:", username);
-      const res = await fetch("http://localhost:5000/login", { 
+      const res = await fetch("/login", { 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
 
-      console.log("Fetch complete. Status:", res.status);
+      const data = await res.json();
 
       if (!res.ok) {
-        const errorData = await res.json();
-        console.error("Login failed:", errorData);
-        alert(errorData.message || "Login failed");
+        alert(data.message || "Login failed");
         return;
       }
 
-      const data = await res.json();
-      console.log("Login successful. Response:", data);
+      localStorage.setItem("username", username);
       alert(data.message);
 
-      // Save username for dashboard
-      localStorage.setItem("username", username);
-      console.log("Username saved in localStorage:", localStorage.getItem("username"));
-
-      // Redirect to dashboard
       window.location.href = "/dashboard";
 
     } catch (err) {
-      console.error("Network error:", err);
-      alert("Unable to connect to server. Is the backend running?");
+      console.error(err);
+      alert("Server error. Please try again.");
     }
   };
 
