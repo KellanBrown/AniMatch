@@ -1,8 +1,9 @@
 {
   "name": "animatch",
   "version": "1.0.0",
-  "description": "AniMatch is a personalized anime recommendation website. It will use collaborative filtering and content-based techniques to suggest new anime to users.",
+  "description": "AniMatch is a personalized anime recommendation website. Uses collaborative filtering and content-based techniques to suggest new anime to users.",
   "main": "server.js",
+  "type": "commonjs",
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
@@ -12,10 +13,6 @@
     "type": "git",
     "url": "git+https://github.com/KellanBrown/AniMatch.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "bugs": {
     "url": "https://github.com/KellanBrown/AniMatch/issues"
   },
@@ -25,7 +22,6 @@
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
-    "node-fetch": "^3.3.2",
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {

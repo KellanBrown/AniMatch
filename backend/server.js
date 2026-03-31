@@ -195,10 +195,11 @@ app.get("/search", async (req, res) => {
   }
 });
 
-// ------------------- SERVE REACT FRONTEND -------------------
+// ------------------- SERVE REACT FRONTEND (Express 5 safe) -------------------
 app.use(express.static(path.join(__dirname, "../frontend/build")));
 
-app.get("*", (req, res) => {
+// Use Express 5 compatible wildcard route
+app.get("/:any(.*)", (req, res) => {
   res.sendFile(path.join(__dirname, "../frontend/build", "index.html"));
 });
 
