@@ -2,38 +2,25 @@ const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
 const axios = require("axios");
-const path = require("path");
 const db = require("./database");
 
 const app = express();
 
+// ------------------- MIDDLEWARE -------------------
 app.use(cors());
 app.use(express.json());
 
-// ------------------- API ROUTES -------------------
-
-// Root
+// ------------------- ROOT -------------------
 app.get("/", (req, res) => {
   res.send("AniMatch backend is running!");
 });
 
-// Dashboard
-app.get("/dashboard/:username", (req, res) => {
-  const { username } = req.params;
+// ------------------- HELPER -------------------
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-  db.get(
-    `SELECT username, email, age, gender FROM users WHERE username = ?`,
-    [username],
-    (err, user) => {
-      if (err) return res.status(500).json({ message: "Database error." });
-      if (!user) return res.status(404).json({ message: "User not found." });
+// ------------------- AUTH -------------------
 
-      res.json({ user, recommendations: [] });
-    }
-  );
-});
-
-// Signup
+// SIGNUP
 app.post("/signup", async (req, res) => {
   const { username, email, age, gender, password } = req.body;
 
@@ -60,29 +47,70 @@ app.post("/signup", async (req, res) => {
   );
 });
 
-// Login
+// LOGIN
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
-  if (!username || !password) {
-    return res.status(400).json({ message: "Username and password required." });
-  }
+  db.get(
+    `SELECT * FROM users WHERE username = ?`,
+    [username],
+    async (err, user) => {
+      if (err) return res.status(500).json({ message: "Database error." });
+      if (!user) return res.status(401).json({ message: "Invalid credentials." });
 
-  db.get(`SELECT * FROM users WHERE username = ?`, [username], async (err, user) => {
-    if (err) return res.status(500).json({ message: "Database error." });
-    if (!user) return res.status(401).json({ message: "Invalid credentials." });
+      const valid = await bcrypt.compare(password, user.passwordHash);
+      if (!valid) return res.status(401).json({ message: "Invalid credentials." });
 
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) return res.status(401).json({ message: "Invalid credentials." });
-
-    res.json({ message: `Login successful! Welcome back, ${username}` });
-  });
+      res.json({ message: `Login successful! Welcome back, ${username}` });
+    }
+  );
 });
 
-// 🧠 Helper: delay function
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+// ------------------- DASHBOARD -------------------
+app.get("/dashboard/:username", (req, res) => {
+  const { username } = req.params;
 
-// Recommendations
+  db.get(
+    `SELECT username, email, age, gender FROM users WHERE username = ?`,
+    [username],
+    (err, user) => {
+      if (err) return res.status(500).json({ message: "Database error." });
+      if (!user) return res.status(404).json({ message: "User not found." });
+
+      res.json({ user, recommendations: [] });
+    }
+  );
+});
+
+// ------------------- SEARCH -------------------
+app.get("/search", async (req, res) => {
+  try {
+    const query = req.query.q;
+    if (!query) return res.status(400).json({ error: "Search query required" });
+
+    await delay(500);
+
+    const response = await axios.get("https://api.jikan.moe/v4/anime", {
+      params: { q: query, limit: 12 }
+    });
+
+    const results = response.data.data.map(anime => ({
+      id: anime.mal_id,
+      title: anime.title_english || anime.title,
+      image: anime.images?.jpg?.image_url || "",
+      rating: anime.score || "N/A",
+      episodes: anime.episodes,
+      url: anime.url
+    }));
+
+    res.json(results);
+  } catch (error) {
+    console.error("Search error:", error.message);
+    res.status(500).json({ error: "Search failed" });
+  }
+});
+
+// ------------------- RECOMMENDATIONS -------------------
 app.post("/recommend", async (req, res) => {
   const { genres, maxEpisodes, hiddenGem } = req.body;
 
@@ -104,29 +132,21 @@ app.post("/recommend", async (req, res) => {
       const genreId = genreMap[g];
       if (!genreId) continue;
 
-      try {
-        const response = await axios.get("https://api.jikan.moe/v4/anime", {
-          params: { genres: genreId, limit: 25 }
-        });
+      const response = await axios.get("https://api.jikan.moe/v4/anime", {
+        params: { genres: genreId, limit: 25 }
+      });
 
-        results.push(...response.data.data);
-
-        // 🔥 CRITICAL: avoid rate limit
-        await delay(1000);
-
-      } catch (err) {
-        console.error(`Jikan error for genre ${g}:`, err.response?.status, err.message);
-      }
+      results.push(...response.data.data);
+      await delay(1000);
     }
 
-    const unique = Array.from(new Map(results.map(a => [a.mal_id, a])).values());
-
-    let filtered = unique;
+    let filtered = Array.from(
+      new Map(results.map(a => [a.mal_id, a])).values()
+    );
 
     if (maxEpisodes) {
       filtered = filtered.filter(a =>
-        Number.isInteger(a.episodes) &&
-        a.episodes > 0 &&
+        a.episodes &&
         a.episodes <= maxEpisodes
       );
     }
@@ -148,46 +168,40 @@ app.post("/recommend", async (req, res) => {
     }));
 
     res.json(finalResults);
-
   } catch (error) {
-    console.error("Recommendation FULL error:", error.response?.data || error.message);
-    res.json([]);
+    console.error("Recommendation error:", error.message);
+    res.status(500).json([]);
   }
 });
 
-// Search Anime
-app.get("/search", async (req, res) => {
-  try {
-    const query = req.query.q;
-    if (!query) return res.status(400).json({ error: "Search query required" });
+// ------------------- ⭐ SAVE ANIME (FIXED) -------------------
+app.post("/save-anime", (req, res) => {
+  const { username, anime } = req.body;
 
-    // 🔥 small delay for safety
-    await delay(500);
-
-    const response = await axios.get("https://api.jikan.moe/v4/anime", {
-      params: { q: query, limit: 12 }
-    });
-
-    const results = response.data.data.map(anime => ({
-      id: anime.mal_id,
-      title: anime.title_english || anime.title,
-      image: anime.images?.jpg?.image_url || "",
-      rating: anime.score || "N/A",
-      episodes: anime.episodes,
-      url: anime.url
-    }));
-
-    res.json(results);
-
-  } catch (error) {
-    console.error("Search FULL error:", error.response?.data || error.message);
-    res.status(500).json({ error: "Search failed" });
+  if (!username || !anime) {
+    return res.status(400).json({ message: "Missing data." });
   }
-});
 
+  const { id, title, image, url } = anime;
+
+  db.run(
+    `INSERT INTO saved_anime (username, animeId, title, image, url)
+     VALUES (?, ?, ?, ?, ?)`,
+    [username, id, title, image, url],
+    function (err) {
+      if (err) {
+        console.error("Save error:", err.message);
+        return res.status(500).json({ message: "Failed to save anime." });
+      }
+
+      res.json({ message: "Anime saved successfully!" });
+    }
+  );
+});
 
 // ------------------- START SERVER -------------------
 const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

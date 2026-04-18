@@ -3,6 +3,7 @@ const path = require("path");
 
 // Database file
 const dbPath = path.resolve(__dirname, "animatch.db");
+
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error("Error opening database", err.message);
@@ -11,7 +12,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
   }
 });
 
-// Create users table if it doesn't exist
+// USERS TABLE
 db.run(
   `CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -22,7 +23,22 @@ db.run(
     passwordHash TEXT
   )`,
   (err) => {
-    if (err) console.error("Error creating table", err.message);
+    if (err) console.error("Error creating users table", err.message);
+  }
+);
+
+// SAVED ANIME TABLE (FIX)
+db.run(
+  `CREATE TABLE IF NOT EXISTS saved_anime (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT,
+    animeId INTEGER,
+    title TEXT,
+    image TEXT,
+    url TEXT
+  )`,
+  (err) => {
+    if (err) console.error("Error creating saved_anime table", err.message);
   }
 );
 
