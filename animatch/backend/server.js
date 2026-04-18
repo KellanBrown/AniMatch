@@ -78,6 +78,24 @@ app.get("/dashboard/:username", (req, res) => {
   );
 });
 
+// ---------------- ⭐ FIXED: SAVED ANIME FETCH (MISSING ROUTE) ----------------
+app.get("/saved-anime/:username", (req, res) => {
+  const { username } = req.params;
+
+  db.all(
+    `SELECT * FROM saved_anime WHERE username = ?`,
+    [username],
+    (err, rows) => {
+      if (err) {
+        console.error("Saved anime error:", err.message);
+        return res.status(500).json({ message: "Database error." });
+      }
+
+      res.json(rows);
+    }
+  );
+});
+
 // ---------------- SEARCH ----------------
 app.get("/search", async (req, res) => {
   try {
@@ -106,7 +124,7 @@ app.get("/search", async (req, res) => {
   }
 });
 
-// ---------------- RECOMMENDATIONS (FIXED + IMPROVED) ----------------
+// ---------------- RECOMMENDATIONS ----------------
 app.post("/recommend", async (req, res) => {
   const { genres = [], maxEpisodes, hiddenGem, mood } = req.body;
 
