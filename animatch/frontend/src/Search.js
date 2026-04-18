@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import AnimeCard from "./components/AnimeCard";
 
@@ -8,40 +8,77 @@ function Search() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
+
   const navigate = useNavigate();
+  const debounceRef = useRef(null);
 
-  let debounceTimer;
-
+  // ---------------- INPUT ----------------
   const handleInput = (e) => {
     const value = e.target.value;
     setQuery(value);
 
-    clearTimeout(debounceTimer);
+    clearTimeout(debounceRef.current);
 
     if (value.length < 2) {
       setSuggestions([]);
       return;
     }
 
-    debounceTimer = setTimeout(async () => {
+    debounceRef.current = setTimeout(async () => {
       try {
         const res = await fetch(`${API}/search?q=${value}`);
         const data = await res.json();
-        if (Array.isArray(data)) setSuggestions(data.slice(0, 5));
+
+        if (Array.isArray(data)) {
+          setSuggestions(data.slice(0, 5));
+        }
       } catch (err) {
         console.error(err);
       }
     }, 300);
   };
 
+  // ---------------- SEARCH ----------------
   const handleSearch = async (e) => {
     e.preventDefault();
     setSuggestions([]);
 
-    const res = await fetch(`${API}/search?q=${query}`);
-    const data = await res.json();
+    try {
+      const res = await fetch(`${API}/search?q=${query}`);
+      const data = await res.json();
 
-    setResults(Array.isArray(data) ? data : []);
+      setResults(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // ---------------- FIND SIMILAR (FIXED LOGIC) ----------------
+  const handleSimilarClick = async (animeId) => {
+    console.log("Find Similar clicked:", animeId);
+
+    try {
+      /**
+       * IMPORTANT:
+       * Jikan does NOT support "similar by ID" via /search
+       * So we approximate similarity by pulling same title keyword
+       */
+
+      const selectedAnime = results.find(a => a.id === animeId);
+
+      if (!selectedAnime) return;
+
+      const keyword = selectedAnime.title?.split(" ")[0]; // simple similarity hack
+
+      const res = await fetch(`${API}/search?q=${keyword}`);
+      const data = await res.json();
+
+      if (Array.isArray(data)) {
+        setResults(data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   return (
@@ -53,6 +90,7 @@ function Search() {
         <button onClick={() => navigate("/dashboard")}>Profile</button>
       </div>
 
+      {/* SEARCH INPUT */}
       <form onSubmit={handleSearch} style={{ display: "flex", gap: "10px" }}>
         <input
           value={query}
@@ -63,6 +101,7 @@ function Search() {
         <button type="submit">Search</button>
       </form>
 
+      {/* SUGGESTIONS */}
       {suggestions.map((a) => (
         <div
           key={a.id}
@@ -73,6 +112,7 @@ function Search() {
         </div>
       ))}
 
+      {/* RESULTS */}
       <div
         style={{
           display: "grid",
@@ -85,7 +125,11 @@ function Search() {
           <p>No results yet...</p>
         ) : (
           results.map((anime) => (
-            <AnimeCard key={anime.id} anime={anime} />
+            <AnimeCard
+              key={anime.id}
+              anime={anime}
+              onSimilarClick={handleSimilarClick}
+            />
           ))
         )}
       </div>

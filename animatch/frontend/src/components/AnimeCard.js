@@ -2,10 +2,10 @@ import React from "react";
 
 const API = "https://animatch-ofks.onrender.com";
 
-function AnimeCard({ anime, onSimilarClick }) {
-  // ✅ Normalize ID once (fixes 90% of your bugs)
-  const animeId = anime.id || anime.mal_id;
+function AnimeCard({ anime = {}, onSimilarClick = () => {} }) {
+  const animeId = anime.id ?? anime.mal_id;
 
+  // ---------------- SAVE ----------------
   const handleSave = async () => {
     const username = localStorage.getItem("username");
 
@@ -17,9 +17,7 @@ function AnimeCard({ anime, onSimilarClick }) {
     try {
       const res = await fetch(`${API}/save-anime`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username,
           anime: {
@@ -33,8 +31,6 @@ function AnimeCard({ anime, onSimilarClick }) {
 
       const data = await res.json();
 
-      console.log("SAVE RESPONSE:", res.status, data);
-
       if (res.ok) {
         alert("✅ Saved to your profile!");
       } else {
@@ -46,27 +42,24 @@ function AnimeCard({ anime, onSimilarClick }) {
     }
   };
 
+  // ---------------- SIMILAR ----------------
+  const handleSimilar = () => {
+    if (!animeId) {
+      console.warn("No animeId found for similarity request");
+      return;
+    }
+
+    onSimilarClick(animeId);
+  };
+
   return (
-    <div
-      className="card"
-      style={{
-        width: "100%",
-        maxWidth: "220px",
-        margin: "0 auto",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between"
-      }}
-    >
-      <a
-        href={anime.url}
-        target="_blank"
-        rel="noreferrer"
-        style={{ textDecoration: "none", color: "inherit" }}
-      >
+    <div className="card" style={{ maxWidth: "220px", margin: "0 auto" }}>
+      
+      {/* IMAGE + TITLE */}
+      <a href={anime.url || "#"} target="_blank" rel="noreferrer">
         <img
-          src={anime.image}
-          alt={anime.title}
+          src={anime.image || ""}
+          alt={anime.title || "Anime"}
           style={{
             width: "100%",
             height: "260px",
@@ -76,19 +69,21 @@ function AnimeCard({ anime, onSimilarClick }) {
         />
 
         <h3 style={{ fontSize: "14px", marginTop: "8px" }}>
-          {anime.title}
+          {anime.title || "Unknown Title"}
         </h3>
       </a>
 
+      {/* RATING */}
       <p style={{ fontSize: "12px", opacity: 0.8 }}>
-        ⭐ {anime.rating || anime.score || "N/A"}
+        ⭐ {anime.rating ?? anime.score ?? "N/A"}
       </p>
 
+      {/* EPISODES */}
       <p style={{ fontSize: "12px", opacity: 0.8 }}>
-        📺 {anime.episodes || "Unknown"} eps
+        📺 {anime.episodes ?? "Unknown"} eps
       </p>
 
-      {/* SAVE */}
+      {/* SAVE BUTTON */}
       <button
         onClick={handleSave}
         style={{
@@ -105,9 +100,9 @@ function AnimeCard({ anime, onSimilarClick }) {
         ⭐ Save to Profile
       </button>
 
-      {/* FIND SIMILAR */}
+      {/* FIND SIMILAR BUTTON */}
       <button
-        onClick={() => onSimilarClick(animeId)}
+        onClick={handleSimilar}
         style={{
           marginTop: "6px",
           width: "100%",
@@ -116,6 +111,7 @@ function AnimeCard({ anime, onSimilarClick }) {
       >
         Find Similar
       </button>
+
     </div>
   );
 }

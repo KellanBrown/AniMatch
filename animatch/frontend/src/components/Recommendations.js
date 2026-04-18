@@ -113,6 +113,24 @@ function Recommendations() {
     }
   };
 
+  // ⭐ FIX #1: ADD THIS (THIS WAS MISSING)
+  const handleSimilarClick = async (animeId) => {
+    try {
+      const res = await fetch(`${API}/search?q=${animeId}`);
+      const data = await res.json();
+
+      setRecommendationStack([
+        {
+          title: "Similar Anime",
+          data: Array.isArray(data) ? data : []
+        }
+      ]);
+
+    } catch (err) {
+      console.error("Similar fetch failed:", err);
+    }
+  };
+
   if (!answers) return <p>Please take the quiz first.</p>;
   if (loading) return <p>Loading recommendations...</p>;
 
@@ -137,9 +155,12 @@ function Recommendations() {
             {(section.data || []).map(anime => (
               <div key={anime.id} style={{ display: "flex", flexDirection: "column" }}>
 
-                <AnimeCard anime={anime} />
+                {/* ⭐ FIX #2: PASS THE FUNCTION DOWN */}
+                <AnimeCard
+                  anime={anime}
+                  onSimilarClick={handleSimilarClick}
+                />
 
-                {/* ---------------- WATCHED ---------------- */}
                 <label style={{ fontSize: "12px", marginTop: "6px" }}>
                   <input
                     type="checkbox"
@@ -149,7 +170,6 @@ function Recommendations() {
                   {" "}Watched
                 </label>
 
-                {/* ---------------- RATING ---------------- */}
                 <input
                   type="number"
                   min="1"
