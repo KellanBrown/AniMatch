@@ -6,21 +6,17 @@ const db = require("./database");
 
 const app = express();
 
-// ------------------- MIDDLEWARE -------------------
 app.use(cors());
 app.use(express.json());
 
-// ------------------- ROOT -------------------
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// ---------------- ROOT ----------------
 app.get("/", (req, res) => {
   res.send("AniMatch backend is running!");
 });
 
-// ------------------- HELPER -------------------
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-// ------------------- AUTH -------------------
-
-// SIGNUP
+// ---------------- SIGNUP ----------------
 app.post("/signup", async (req, res) => {
   const { username, email, age, gender, password } = req.body;
 
@@ -47,7 +43,7 @@ app.post("/signup", async (req, res) => {
   );
 });
 
-// LOGIN
+// ---------------- LOGIN ----------------
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
@@ -66,7 +62,7 @@ app.post("/login", async (req, res) => {
   );
 });
 
-// ------------------- DASHBOARD -------------------
+// ---------------- DASHBOARD ----------------
 app.get("/dashboard/:username", (req, res) => {
   const { username } = req.params;
 
@@ -82,13 +78,13 @@ app.get("/dashboard/:username", (req, res) => {
   );
 });
 
-// ------------------- SEARCH -------------------
+// ---------------- SEARCH ----------------
 app.get("/search", async (req, res) => {
   try {
     const query = req.query.q;
     if (!query) return res.status(400).json({ error: "Search query required" });
 
-    await delay(500);
+    await delay(300);
 
     const response = await axios.get("https://api.jikan.moe/v4/anime", {
       params: { q: query, limit: 12 }
@@ -110,9 +106,9 @@ app.get("/search", async (req, res) => {
   }
 });
 
-// ------------------- RECOMMENDATIONS -------------------
+// ---------------- RECOMMENDATIONS (FIXED + IMPROVED) ----------------
 app.post("/recommend", async (req, res) => {
-  const { genres, maxEpisodes, hiddenGem } = req.body;
+  const { genres = [], maxEpisodes, hiddenGem, mood } = req.body;
 
   const genreMap = {
     Action: 1,
@@ -125,19 +121,41 @@ app.post("/recommend", async (req, res) => {
     SciFi: 24
   };
 
+  const moodBoost = {
+    Excited: ["Action", "Adventure"],
+    Chill: ["Comedy", "Fantasy"],
+    Adventurous: ["Action", "Fantasy", "Adventure"],
+    Romantic: ["Romance"],
+    Sad: ["Drama", "Romance"],
+    Comedic: ["Comedy"]
+  };
+
   try {
     let results = [];
 
-    for (const g of genres) {
+    let finalGenres = [...genres];
+
+    if (mood && moodBoost[mood]) {
+      finalGenres = [...new Set([...finalGenres, ...moodBoost[mood]])];
+    }
+
+    if (finalGenres.length === 0) finalGenres = ["Action"];
+
+    for (const g of finalGenres) {
       const genreId = genreMap[g];
       if (!genreId) continue;
 
       const response = await axios.get("https://api.jikan.moe/v4/anime", {
-        params: { genres: genreId, limit: 25 }
+        params: {
+          genres: genreId,
+          limit: 25,
+          order_by: "score",
+          sort: "desc"
+        }
       });
 
       results.push(...response.data.data);
-      await delay(1000);
+      await delay(600);
     }
 
     let filtered = Array.from(
@@ -145,20 +163,27 @@ app.post("/recommend", async (req, res) => {
     );
 
     if (maxEpisodes) {
-      filtered = filtered.filter(a =>
-        a.episodes &&
-        a.episodes <= maxEpisodes
-      );
+      filtered = filtered.filter(a => a.episodes && a.episodes <= maxEpisodes);
     }
 
     if (hiddenGem) {
-      filtered = filtered.filter(a =>
-        a.score >= 7 &&
-        a.members < 250000
-      );
+      filtered = filtered.filter(a => a.score >= 7 && a.members < 300000);
+    } else {
+      filtered = filtered.filter(a => a.score >= 6);
     }
 
-    const finalResults = filtered.slice(0, 12).map(anime => ({
+    const scored = filtered.map(anime => {
+      let score = anime.score || 0;
+
+      if (anime.score >= 8) score += 2;
+      if (anime.members > 50000 && anime.members < 2000000) score += 1;
+
+      return { anime, score };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+
+    const finalResults = scored.slice(0, 12).map(({ anime }) => ({
       id: anime.mal_id,
       title: anime.title_english || anime.title,
       image: anime.images?.jpg?.image_url || "",
@@ -168,13 +193,14 @@ app.post("/recommend", async (req, res) => {
     }));
 
     res.json(finalResults);
+
   } catch (error) {
     console.error("Recommendation error:", error.message);
     res.status(500).json([]);
   }
 });
 
-// ------------------- ⭐ SAVE ANIME (FIXED) -------------------
+// ---------------- SAVE ANIME ----------------
 app.post("/save-anime", (req, res) => {
   const { username, anime } = req.body;
 
@@ -199,7 +225,7 @@ app.post("/save-anime", (req, res) => {
   );
 });
 
-// ------------------- START SERVER -------------------
+// ---------------- START ----------------
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {

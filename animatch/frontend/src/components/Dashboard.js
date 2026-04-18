@@ -4,39 +4,58 @@ const API = "https://animatch-ofks.onrender.com";
 
 function Dashboard() {
   const [user, setUser] = useState(null);
-  const [animeList, setAnimeList] = useState([]);
+  const [savedAnime, setSavedAnime] = useState([]);
+  const [loadingAnime, setLoadingAnime] = useState(true);
 
-useEffect(() => {
-  const username = localStorage.getItem("username");
+  useEffect(() => {
+    const username = localStorage.getItem("username");
 
-  if (!username) {
-    window.location.hash = "/";
-    return;
-  }
+    if (!username) {
+      window.location.hash = "/";
+      return;
+    }
 
-  const fetchData = () => {
-    fetch(`${API}/dashboard/${username}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to fetch dashboard");
-        return res.json();
-      })
-      .then((data) => {
-        if (data.user) {
-          setUser(data.user);
-          setAnimeList(data.recommendations || []);
+    const fetchData = async () => {
+      try {
+        // ---------------- USER INFO ----------------
+        const userRes = await fetch(`${API}/dashboard/${username}`);
+        const userData = await userRes.json();
+
+        if (userRes.ok && userData.user) {
+          setUser(userData.user);
         }
-      })
-      .catch((err) => console.error(err));
-  };
 
-  fetchData();
+      } catch (err) {
+        console.error("User fetch error:", err);
+      }
 
-  // 🔥 auto-refresh every 2 seconds (simple + effective)
-  const interval = setInterval(fetchData, 2000);
+      try {
+        // ---------------- SAVED ANIME ----------------
+        const savedRes = await fetch(`${API}/saved-anime/${username}`);
 
-  return () => clearInterval(interval);
-}, []);
+        // IMPORTANT: prevent crash if endpoint doesn't exist yet
+        if (!savedRes.ok) {
+          console.warn("Saved anime endpoint missing or broken");
+          setSavedAnime([]);
+          setLoadingAnime(false);
+          return;
+        }
 
+        const savedData = await savedRes.json();
+        setSavedAnime(Array.isArray(savedData) ? savedData : []);
+
+      } catch (err) {
+        console.error("Saved anime fetch error:", err);
+        setSavedAnime([]);
+      }
+
+      setLoadingAnime(false);
+    };
+
+    fetchData();
+  }, []);
+
+  // ---------------- SAFE RENDER GUARD ----------------
   if (!user) return <p>Loading your profile...</p>;
 
   return (
@@ -71,10 +90,12 @@ useEffect(() => {
       </div>
 
       {/* ---------------- SAVED ANIME ---------------- */}
-      <h2>Your Anime Library</h2>
+      <h2>Your Saved Anime</h2>
 
-      {animeList.length === 0 ? (
-        <p>No saved anime yet. Click “Save to Profile” on a card.</p>
+      {loadingAnime ? (
+        <p>Loading saved anime...</p>
+      ) : savedAnime.length === 0 ? (
+        <p>No saved anime yet. Click “Save to Profile” on an anime card.</p>
       ) : (
         <div
           style={{
@@ -84,9 +105,9 @@ useEffect(() => {
             marginTop: "20px"
           }}
         >
-          {animeList.map((anime) => (
+          {savedAnime.map((anime) => (
             <div
-              key={anime.id}
+              key={anime.animeId || anime.id}
               style={{
                 border: "1px solid #ddd",
                 borderRadius: "10px",
@@ -106,15 +127,9 @@ useEffect(() => {
                 />
               </a>
 
-              <h3 style={{ fontSize: "14px" }}>{anime.title}</h3>
-
-              <p style={{ fontSize: "12px" }}>
-                ⭐ Rating: {anime.rating || "N/A"}
-              </p>
-
-              <p style={{ fontSize: "12px" }}>
-                {anime.watched ? "✔ Watched" : "👀 Not Watched"}
-              </p>
+              <h3 style={{ fontSize: "14px" }}>
+                {anime.title}
+              </h3>
             </div>
           ))}
         </div>
