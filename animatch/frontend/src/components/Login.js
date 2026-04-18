@@ -8,21 +8,28 @@ function Login() {
   const handleLogin = async (e) => {
     e.preventDefault();
 
-    const res = await fetch("http://127.0.0.1:5000/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
-    });
+    try {
+      const res = await fetch("https://animatch-ofks.onrender.com/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
 
-    const data = await res.json();
-    alert(data.message);
+      const data = await res.json();
 
-    if (res.ok) {
-      // ✅ Save username so Dashboard knows who is logged in
+      if (!res.ok) {
+        alert(data.message || "Login failed");
+        return;
+      }
+
       localStorage.setItem("username", username);
+      alert(data.message);
 
-      // Redirect to dashboard
-      window.location.href = "/dashboard";
+      window.location.hash = "/dashboard";
+
+    } catch (err) {
+      console.error(err);
+      alert("Server error. Please try again.");
     }
   };
 
@@ -53,7 +60,7 @@ function Login() {
 
         <button
           className="toggle-btn"
-          onClick={() => (window.location.href = "/signup")}
+          onClick={() => (window.location.hash = "/signup")}
         >
           Don't have an account? Sign up
         </button>

@@ -1,5 +1,8 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import AnimeCard from "./components/AnimeCard";
+
+const API = "https://animatch-ofks.onrender.com";
 
 function Search() {
   const [query, setQuery] = useState("");
@@ -7,96 +10,82 @@ function Search() {
   const [suggestions, setSuggestions] = useState([]);
   const navigate = useNavigate();
 
-  // Called on typing to show autocomplete suggestions
-  const handleInput = async (e) => {
+  let debounceTimer;
+
+  const handleInput = (e) => {
     const value = e.target.value;
     setQuery(value);
+
+    clearTimeout(debounceTimer);
 
     if (value.length < 2) {
       setSuggestions([]);
       return;
     }
 
-    try {
-      const res = await fetch(`http://127.0.0.1:5000/api/search?q=${value}`);
-      const data = await res.json();
-
-      if (data?.data) {
-        setSuggestions(data.data.slice(0, 5)); // top 5 suggestions
+    debounceTimer = setTimeout(async () => {
+      try {
+        const res = await fetch(`${API}/search?q=${value}`);
+        const data = await res.json();
+        if (Array.isArray(data)) setSuggestions(data.slice(0, 5));
+      } catch (err) {
+        console.error(err);
       }
-    } catch (err) {
-      console.error("Error fetching suggestions:", err);
-    }
+    }, 300);
   };
 
-  // Select a suggestion
-  const handleSelect = (title) => {
-    setQuery(title);
-    setSuggestions([]);
-  };
-
-  // Run full search
   const handleSearch = async (e) => {
     e.preventDefault();
     setSuggestions([]);
 
-    if (!query) return;
+    const res = await fetch(`${API}/search?q=${query}`);
+    const data = await res.json();
 
-    try {
-      const res = await fetch(`http://127.0.0.1:5000/api/search?q=${query}`);
-      const data = await res.json();
-
-      if (data?.data) {
-        setResults(data.data);
-      }
-    } catch (err) {
-      console.error("Error fetching search results:", err);
-    }
+    setResults(Array.isArray(data) ? data : []);
   };
 
   return (
-    <div className="search-page" style={{ position: "relative", paddingBottom: "50px" }}>
-      <h1>Search Anime</h1>
+    <div style={{ padding: "40px", maxWidth: "1000px", margin: "auto" }}>
+      <h1>AniMatch 🎌</h1>
 
-      {/* Navigation Button */}
-      <div className="nav-buttons">
-        <button onClick={() => navigate("/dashboard")}>🏠 Profile</button>
+      <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <h2>Search Anime</h2>
+        <button onClick={() => navigate("/dashboard")}>Profile</button>
       </div>
 
-      <form onSubmit={handleSearch}>
+      <form onSubmit={handleSearch} style={{ display: "flex", gap: "10px" }}>
         <input
-          type="text"
-          placeholder="Search for an anime..."
           value={query}
           onChange={handleInput}
-          autoComplete="off"
-          required
+          placeholder="Search anime..."
+          style={{ width: "100%", padding: "8px" }}
         />
         <button type="submit">Search</button>
       </form>
 
-      {/* Autocomplete Suggestions */}
-      {suggestions.length > 0 && (
-        <div className="suggestions">
-          {suggestions.map((anime) => (
-            <div key={anime.mal_id} onClick={() => handleSelect(anime.title)}>
-              {anime.title}
-            </div>
-          ))}
+      {suggestions.map((a) => (
+        <div
+          key={a.id}
+          onClick={() => setQuery(a.title)}
+          style={{ cursor: "pointer", padding: "5px" }}
+        >
+          {a.title}
         </div>
-      )}
+      ))}
 
-      {/* Search Results */}
-      <div className="results search-results">
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+          gap: "20px",
+          marginTop: "30px"
+        }}
+      >
         {results.length === 0 ? (
           <p>No results yet...</p>
         ) : (
           results.map((anime) => (
-            <div key={anime.mal_id} className="anime-card">
-              <img src={anime.images.jpg.image_url} alt={anime.title} />
-              <h3>{anime.title}</h3>
-              <p>Score: {anime.score || "N/A"}</p>
-            </div>
+            <AnimeCard key={anime.id} anime={anime} />
           ))
         )}
       </div>
