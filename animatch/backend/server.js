@@ -94,27 +94,112 @@ app.get("/saved-anime/:username", (req, res) => {
   );
 });
 
-// ---------------- ANIME STATUS (PERSISTENCE FIX) ----------------
-// Called by AnimeCard on mount to pre-fill watched/rating for a specific anime.
-// Returns { watched, rating } for this user+anime combination.
+// ---------------- ANIME STATUS (single anime, for AnimeCard persistence) ----------------
 app.get("/anime-status/:username/:animeId", (req, res) => {
   const { username, animeId } = req.params;
 
-  const watchQuery = `SELECT watched FROM watch_status WHERE username = ? AND animeId = ?`;
-  const ratingQuery = `SELECT rating FROM ratings WHERE username = ? AND animeId = ?`;
+  db.get(
+    `SELECT watched FROM watch_status WHERE username = ? AND animeId = ?`,
+    [username, animeId],
+    (err, watchRow) => {
+      if (err) return res.status(500).json({ message: "Database error." });
 
-  db.get(watchQuery, [username, animeId], (err, watchRow) => {
-    if (err) return res.status(500).json({ message: "Database error." });
+      db.get(
+        `SELECT rating FROM ratings WHERE username = ? AND animeId = ?`,
+        [username, animeId],
+        (err2, ratingRow) => {
+          if (err2) return res.status(500).json({ message: "Database error." });
 
-    db.get(ratingQuery, [username, animeId], (err2, ratingRow) => {
-      if (err2) return res.status(500).json({ message: "Database error." });
+          res.json({
+            watched: watchRow ? watchRow.watched : 0,
+            rating: ratingRow ? ratingRow.rating : null
+          });
+        }
+      );
+    }
+  );
+});
 
+// ---------------- ALL STATUS (for Watchlist page — fetches all at once) ----------------
+// Returns every watch_status + rating row for a user so Watchlist can
+// merge them into the saved anime list without N separate requests.
+app.get("/all-status/:username", (req, res) => {
+  const { username } = req.params;
+
+  db.all(
+    `SELECT
+       sa.animeId,
+       COALESCE(ws.watched, 0) AS watched,
+       r.rating
+     FROM saved_anime sa
+     LEFT JOIN watch_status ws ON ws.username = sa.username AND ws.animeId = sa.animeId
+     LEFT JOIN ratings r       ON r.username  = sa.username AND r.animeId  = sa.animeId
+     WHERE sa.username = ?`,
+    [username],
+    (err, rows) => {
+      if (err) {
+        console.error("All-status error:", err.message);
+        return res.status(500).json({ message: "Database error." });
+      }
+      res.json(rows);
+    }
+  );
+});
+
+// ---------------- USER STATS ----------------
+// Computes dashboard stats: total saved, watched, unwatched, avg rating.
+// Note: "top genre" requires genre data stored with the anime — for now
+// we return a placeholder; phase 7 (trending) will add genre columns.
+app.get("/user-stats/:username", (req, res) => {
+  const { username } = req.params;
+
+  db.get(
+    `SELECT
+       COUNT(sa.id)                                      AS totalSaved,
+       SUM(CASE WHEN ws.watched = 1 THEN 1 ELSE 0 END)  AS totalWatched,
+       SUM(CASE WHEN ws.watched = 0 OR ws.watched IS NULL THEN 1 ELSE 0 END) AS totalUnwatched,
+       ROUND(AVG(r.rating), 1)                           AS avgRating
+     FROM saved_anime sa
+     LEFT JOIN watch_status ws ON ws.username = sa.username AND ws.animeId = sa.animeId
+     LEFT JOIN ratings r       ON r.username  = sa.username AND r.animeId  = sa.animeId
+     WHERE sa.username = ?`,
+    [username],
+    (err, row) => {
+      if (err) {
+        console.error("Stats error:", err.message);
+        return res.status(500).json({ message: "Database error." });
+      }
       res.json({
-        watched: watchRow ? watchRow.watched : 0,
-        rating: ratingRow ? ratingRow.rating : null
+        totalSaved:    row.totalSaved    || 0,
+        totalWatched:  row.totalWatched  || 0,
+        totalUnwatched: row.totalUnwatched || 0,
+        avgRating:     row.avgRating     || null,
+        topGenre:      null  // will be populated in a later phase
       });
-    });
-  });
+    }
+  );
+});
+
+// ---------------- REMOVE ANIME ----------------
+app.delete("/remove-anime", (req, res) => {
+  const { username, animeId } = req.body;
+
+  if (!username || !animeId) {
+    return res.status(400).json({ message: "Missing data." });
+  }
+
+  // Remove from all three tables so no orphan rows are left behind
+  db.run(`DELETE FROM saved_anime   WHERE username = ? AND animeId = ?`, [username, animeId]);
+  db.run(`DELETE FROM watch_status  WHERE username = ? AND animeId = ?`, [username, animeId]);
+  db.run(`DELETE FROM ratings       WHERE username = ? AND animeId = ?`, [username, animeId],
+    function (err) {
+      if (err) {
+        console.error("Remove error:", err.message);
+        return res.status(500).json({ message: "Failed to remove." });
+      }
+      res.json({ message: "Anime removed." });
+    }
+  );
 });
 
 // ---------------- SEARCH ----------------
@@ -246,17 +331,12 @@ app.post("/save-anime", (req, res) => {
 
   const { id, title, image, url } = anime;
 
-  // DUPLICATE FIX: check if already saved before inserting
   db.get(
     `SELECT id FROM saved_anime WHERE username = ? AND animeId = ?`,
     [username, id],
     (err, existing) => {
       if (err) return res.status(500).json({ message: "Database error." });
-
-      // 409 Conflict = already saved — AnimeCard shows "Already in your list!"
-      if (existing) {
-        return res.status(409).json({ message: "Already saved." });
-      }
+      if (existing) return res.status(409).json({ message: "Already saved." });
 
       db.run(
         `INSERT INTO saved_anime (username, animeId, title, image, url)

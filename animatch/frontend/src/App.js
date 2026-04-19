@@ -5,6 +5,7 @@ import Dashboard from "./components/Dashboard";
 import Search from "./Search";
 import Quiz from "./components/Quiz";
 import Recommendations from "./components/Recommendations";
+import Watchlist from "./Watchlist";
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         <Route path="/search" element={<Search />} />
         <Route path="/quiz" element={<Quiz />} />
         <Route path="/recommendations" element={<Recommendations />} />
+        <Route path="/watchlist" element={<Watchlist />} />
       </Routes>
     </Router>
   );
