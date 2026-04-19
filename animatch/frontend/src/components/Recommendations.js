@@ -11,15 +11,18 @@ function Recommendations() {
   const { answers } = location.state || {};
 
   const [recommendationStack, setRecommendationStack] = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [refetching, setRefetching] = useState(false);
-  const [quizGenres, setQuizGenres]     = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [refetching, setRefetching]   = useState(false);
+  const [quizGenres, setQuizGenres]   = useState([]);
   const [activeGenres, setActiveGenres] = useState([]);
-  const [quizParams, setQuizParams]     = useState({});
+  const [quizParams, setQuizParams]   = useState({});
+  const [seedLabel, setSeedLabel]     = useState(null); // for display
 
   useEffect(() => {
     if (!answers) return;
+
     let mood = null, genres = [], maxEpisodes = null, hiddenGem = false;
+    let seedAnimeId = null, seedAnimeTitle = null;
 
     answers.forEach(answer => {
       if (["Excited","Chill","Adventurous","Romantic","Sad","Comedic"].includes(answer)) mood = answer;
@@ -28,10 +31,23 @@ function Recommendations() {
       if (answer.includes("Medium")) maxEpisodes = 50;
       if (answer.includes("Long"))   maxEpisodes = 100;
       if (answer === "Hidden Gems")  hiddenGem = true;
+
+      // Parse seed anime answers from quiz Q5
+      if (answer.startsWith("__seed__")) {
+        // Format: __seed__{id}__{title}
+        const parts = answer.replace("__seed__", "").split("__");
+        seedAnimeId   = parseInt(parts[0], 10);
+        seedAnimeTitle = parts[1] || null;
+        setSeedLabel(parts[1] || null);
+      } else if (answer.startsWith("__seedtitle__")) {
+        seedAnimeTitle = answer.replace("__seedtitle__", "");
+        setSeedLabel(seedAnimeTitle);
+      }
+      // __noseed__ = user skipped Q5, just ignore it
     });
 
     if (genres.length === 0) genres = ["Action"];
-    const params = { mood, genres, maxEpisodes, hiddenGem };
+    const params = { mood, genres, maxEpisodes, hiddenGem, seedAnimeId, seedAnimeTitle };
     setQuizParams(params);
     setQuizGenres(genres);
     setActiveGenres(genres);
@@ -42,7 +58,7 @@ function Recommendations() {
     if (isInitial) setLoading(true);
     else           setRefetching(true);
     try {
-      const res  = await fetch(`${API}/recommend`, {
+      const res     = await fetch(`${API}/recommend`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(params)
@@ -92,19 +108,52 @@ function Recommendations() {
   const isModified = JSON.stringify([...activeGenres].sort()) !== JSON.stringify([...quizGenres].sort());
 
   if (!answers) return <div className="am-loading">Please take the quiz first.</div>;
-  if (loading)  return <div className="am-loading">Finding your anime...</div>;
+  if (loading)  return (
+    <div className="am-page">
+      <nav className="am-nav">
+        <div className="am-logo"><span className="ani">Ani</span><span className="match">Match</span></div>
+      </nav>
+      <div style={{ textAlign: "center", padding: "60px 24px" }}>
+        <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-muted)", marginBottom: "24px", letterSpacing: "0.05em" }}>
+          {seedLabel ? `Finding anime based on your love of "${seedLabel}"...` : "Finding your perfect anime..."}
+        </div>
+        {/* Loading skeletons */}
+        <div className="am-grid">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} style={{
+              background: "var(--surface)", border: "1px solid var(--border)",
+              borderRadius: "var(--radius-lg)", overflow: "hidden",
+              animation: "pulse 1.4s ease-in-out infinite",
+              animationDelay: `${i * 0.1}s`
+            }}>
+              <div style={{ height: "260px", background: "var(--surface2)" }} />
+              <div style={{ padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                <div style={{ height: "13px", background: "var(--surface3)", borderRadius: "4px", width: "80%" }} />
+                <div style={{ height: "11px", background: "var(--surface3)", borderRadius: "4px", width: "50%" }} />
+              </div>
+            </div>
+          ))}
+        </div>
+        <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }`}</style>
+      </div>
+    </div>
+  );
 
   return (
     <div className="am-page">
-
-      {/* Nav */}
       <nav className="am-nav">
         <div className="am-logo"><span className="ani">Ani</span><span className="match">Match</span></div>
-        <button className="am-btn am-btn-ghost am-btn-sm" onClick={() => navigate("/dashboard")}>⬅ Dashboard</button>
-        <button className="am-btn am-btn-coral am-btn-sm" onClick={() => navigate("/quiz")}>🔄 Retake Quiz</button>
+        <button className="am-btn am-btn-ghost am-btn-sm"  onClick={() => navigate("/dashboard")}>⬅ Profile</button>
+        <button className="am-btn am-btn-coral am-btn-sm"  onClick={() => navigate("/quiz")}>🔄 Retake Quiz</button>
+        <button className="am-btn am-btn-teal am-btn-sm"   onClick={() => navigate("/watchlist")}>📋 Watchlist</button>
       </nav>
 
-      <h1 style={{ marginBottom: "6px" }}>Your <span style={{ color: "var(--coral)" }}>Picks</span></h1>
+      <h1 style={{ marginBottom: "4px" }}>Your <span style={{ color: "var(--coral)" }}>Picks</span></h1>
+      {seedLabel && (
+        <p style={{ fontSize: "13px", color: "var(--purple)", fontWeight: 700, marginBottom: "4px" }}>
+          ✨ Tailored around your love of "{seedLabel}"
+        </p>
+      )}
 
       {/* Genre filter */}
       <div style={{ margin: "16px 0 24px" }}>
@@ -143,12 +192,8 @@ function Recommendations() {
               {section.data.length} results
             </span>
           </div>
-
           {section.data.length === 0 ? (
-            <div className="am-empty">
-              <h3>No results</h3>
-              <p>Try adding more genres above!</p>
-            </div>
+            <div className="am-empty"><h3>No results</h3><p>Try adding more genres above!</p></div>
           ) : (
             <div className="am-grid">
               {section.data.map(anime => (
