@@ -1,15 +1,39 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 const API = "https://animatch-ofks.onrender.com";
 
 function AnimeCard({ anime = {}, onSimilarClick = () => {} }) {
   const animeId = anime.id ?? anime.mal_id;
 
-  // Local state so the card is interactive immediately without waiting for the server
   const [watched, setWatched] = useState(false);
   const [rating, setRatingValue] = useState("");
   const [savedMsg, setSavedMsg] = useState("");
   const [ratingMsg, setRatingMsg] = useState("");
+
+  // ---------------- LOAD SAVED STATE ON MOUNT ----------------
+  // Persistence fix: when the card renders, fetch this user's existing
+  // watched/rating for this anime so the inputs are pre-filled correctly
+  // after a page refresh instead of resetting to blank every time.
+  useEffect(() => {
+    const username = localStorage.getItem("username");
+    if (!username || !animeId) return;
+
+    const loadStatus = async () => {
+      try {
+        const res = await fetch(`${API}/anime-status/${username}/${animeId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        if (data.watched !== undefined) setWatched(!!data.watched);
+        if (data.rating)                setRatingValue(data.rating);
+      } catch (err) {
+        // silently ignore — card still works, just starts blank
+        console.warn("Could not load anime status:", err);
+      }
+    };
+
+    loadStatus();
+  }, [animeId]);
 
   // ---------------- SAVE ----------------
   const handleSave = async () => {
@@ -39,6 +63,10 @@ function AnimeCard({ anime = {}, onSimilarClick = () => {} }) {
 
       if (res.ok) {
         setSavedMsg("✅ Saved!");
+        setTimeout(() => setSavedMsg(""), 2500);
+      } else if (res.status === 409) {
+        // 409 = duplicate — show friendly message instead of an alert
+        setSavedMsg("Already in your list!");
         setTimeout(() => setSavedMsg(""), 2500);
       } else {
         alert(`❌ Save failed: ${data.message || "unknown error"}`);
@@ -71,8 +99,6 @@ function AnimeCard({ anime = {}, onSimilarClick = () => {} }) {
   // ---------------- RATING ----------------
   const handleRating = async (e) => {
     const value = Number(e.target.value);
-
-    // Only accept values 1-10
     if (value < 1 || value > 10) return;
     setRatingValue(value);
 
@@ -104,7 +130,6 @@ function AnimeCard({ anime = {}, onSimilarClick = () => {} }) {
     onSimilarClick(animeId);
   };
 
-  // FIX: episode display — show "?" if null/undefined instead of "Unknown"
   const episodeDisplay = anime.episodes != null ? `${anime.episodes} eps` : "? eps";
 
   return (
@@ -122,7 +147,6 @@ function AnimeCard({ anime = {}, onSimilarClick = () => {} }) {
             borderRadius: "8px"
           }}
         />
-
         <h3 style={{ fontSize: "14px", marginTop: "8px" }}>
           {anime.title || "Unknown Title"}
         </h3>
@@ -133,7 +157,7 @@ function AnimeCard({ anime = {}, onSimilarClick = () => {} }) {
         ⭐ {anime.rating ?? anime.score ?? "N/A"}
       </p>
 
-      {/* FIX: EPISODES — shows "? eps" when count isn't available */}
+      {/* EPISODES */}
       <p style={{ fontSize: "12px", opacity: 0.8 }}>
         📺 {episodeDisplay}
       </p>
@@ -161,7 +185,7 @@ function AnimeCard({ anime = {}, onSimilarClick = () => {} }) {
         </p>
       )}
 
-      {/* FIX: WATCHED CHECKBOX — now actually saves to the database */}
+      {/* WATCHED CHECKBOX */}
       <label style={{ fontSize: "12px", marginTop: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
         <input
           type="checkbox"
@@ -171,7 +195,7 @@ function AnimeCard({ anime = {}, onSimilarClick = () => {} }) {
         Watched
       </label>
 
-      {/* FIX: RATING INPUT — now actually saves to the database */}
+      {/* RATING INPUT */}
       <input
         type="number"
         min="1"

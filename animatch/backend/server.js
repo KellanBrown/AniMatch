@@ -37,7 +37,6 @@ app.post("/signup", async (req, res) => {
         }
         return res.status(500).json({ message: "Database error." });
       }
-
       res.json({ message: `Signup successful! Welcome, ${username}` });
     }
   );
@@ -90,10 +89,32 @@ app.get("/saved-anime/:username", (req, res) => {
         console.error("Saved anime error:", err.message);
         return res.status(500).json({ message: "Database error." });
       }
-
       res.json(rows);
     }
   );
+});
+
+// ---------------- ANIME STATUS (PERSISTENCE FIX) ----------------
+// Called by AnimeCard on mount to pre-fill watched/rating for a specific anime.
+// Returns { watched, rating } for this user+anime combination.
+app.get("/anime-status/:username/:animeId", (req, res) => {
+  const { username, animeId } = req.params;
+
+  const watchQuery = `SELECT watched FROM watch_status WHERE username = ? AND animeId = ?`;
+  const ratingQuery = `SELECT rating FROM ratings WHERE username = ? AND animeId = ?`;
+
+  db.get(watchQuery, [username, animeId], (err, watchRow) => {
+    if (err) return res.status(500).json({ message: "Database error." });
+
+    db.get(ratingQuery, [username, animeId], (err2, ratingRow) => {
+      if (err2) return res.status(500).json({ message: "Database error." });
+
+      res.json({
+        watched: watchRow ? watchRow.watched : 0,
+        rating: ratingRow ? ratingRow.rating : null
+      });
+    });
+  });
 });
 
 // ---------------- SEARCH ----------------
@@ -204,7 +225,6 @@ app.post("/recommend", async (req, res) => {
       image: anime.images?.jpg?.image_url || "",
       rating: anime.score || "N/A",
       url: anime.url,
-      // FIX: pass episodes through properly (was sometimes getting dropped)
       episodes: anime.episodes || null
     }));
 
@@ -226,22 +246,35 @@ app.post("/save-anime", (req, res) => {
 
   const { id, title, image, url } = anime;
 
-  db.run(
-    `INSERT INTO saved_anime (username, animeId, title, image, url)
-     VALUES (?, ?, ?, ?, ?)`,
-    [username, id, title, image, url],
-    function (err) {
-      if (err) {
-        console.error("Save error:", err.message);
-        return res.status(500).json({ message: "Failed to save anime." });
+  // DUPLICATE FIX: check if already saved before inserting
+  db.get(
+    `SELECT id FROM saved_anime WHERE username = ? AND animeId = ?`,
+    [username, id],
+    (err, existing) => {
+      if (err) return res.status(500).json({ message: "Database error." });
+
+      // 409 Conflict = already saved — AnimeCard shows "Already in your list!"
+      if (existing) {
+        return res.status(409).json({ message: "Already saved." });
       }
 
-      res.json({ message: "Anime saved successfully!" });
+      db.run(
+        `INSERT INTO saved_anime (username, animeId, title, image, url)
+         VALUES (?, ?, ?, ?, ?)`,
+        [username, id, title, image, url],
+        function (err2) {
+          if (err2) {
+            console.error("Save error:", err2.message);
+            return res.status(500).json({ message: "Failed to save anime." });
+          }
+          res.json({ message: "Anime saved successfully!" });
+        }
+      );
     }
   );
 });
 
-// FIX: WATCH STATUS ROUTE (was completely missing from server)
+// ---------------- WATCH STATUS ----------------
 app.post("/watch-status", (req, res) => {
   const { username, animeId, watched } = req.body;
 
@@ -249,7 +282,6 @@ app.post("/watch-status", (req, res) => {
     return res.status(400).json({ message: "Missing data." });
   }
 
-  // INSERT or UPDATE if the row already exists for this user+anime
   db.run(
     `INSERT INTO watch_status (username, animeId, watched)
      VALUES (?, ?, ?)
@@ -260,13 +292,12 @@ app.post("/watch-status", (req, res) => {
         console.error("Watch status error:", err.message);
         return res.status(500).json({ message: "Failed to update watch status." });
       }
-
       res.json({ message: "Watch status updated!" });
     }
   );
 });
 
-// FIX: RATE ANIME ROUTE (was completely missing from server)
+// ---------------- RATE ANIME ----------------
 app.post("/rate-anime", (req, res) => {
   const { username, animeId, rating } = req.body;
 
@@ -278,7 +309,6 @@ app.post("/rate-anime", (req, res) => {
     return res.status(400).json({ message: "Rating must be between 1 and 10." });
   }
 
-  // INSERT or UPDATE if the row already exists for this user+anime
   db.run(
     `INSERT INTO ratings (username, animeId, rating)
      VALUES (?, ?, ?)
@@ -289,7 +319,6 @@ app.post("/rate-anime", (req, res) => {
         console.error("Rating error:", err.message);
         return res.status(500).json({ message: "Failed to save rating." });
       }
-
       res.json({ message: "Rating saved!" });
     }
   );
