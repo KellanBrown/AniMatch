@@ -5,230 +5,239 @@ const API = "https://animatch-ofks.onrender.com";
 function AnimeCard({ anime = {}, onSimilarClick = () => {} }) {
   const animeId = anime.id ?? anime.mal_id;
 
-  const [watched, setWatched] = useState(false);
-  const [rating, setRatingValue] = useState("");
-  const [savedMsg, setSavedMsg] = useState("");
-  const [ratingMsg, setRatingMsg] = useState("");
+  const [watched, setWatched]       = useState(false);
+  const [rating, setRatingValue]    = useState("");
+  const [currentEp, setCurrentEp]   = useState(0);
+  const [savedMsg, setSavedMsg]     = useState("");
+  const [ratingMsg, setRatingMsg]   = useState("");
 
-  // ---------------- LOAD SAVED STATE ON MOUNT ----------------
-  // Persistence fix: when the card renders, fetch this user's existing
-  // watched/rating for this anime so the inputs are pre-filled correctly
-  // after a page refresh instead of resetting to blank every time.
+  const totalEps = anime.episodes ?? null;
+
+  // ---- Load saved state on mount ----
   useEffect(() => {
     const username = localStorage.getItem("username");
     if (!username || !animeId) return;
 
-    const loadStatus = async () => {
+    const load = async () => {
       try {
-        const res = await fetch(`${API}/anime-status/${username}/${animeId}`);
+        const res  = await fetch(`${API}/anime-status/${username}/${animeId}`);
         if (!res.ok) return;
         const data = await res.json();
-
         if (data.watched !== undefined) setWatched(!!data.watched);
         if (data.rating)                setRatingValue(data.rating);
+        if (data.currentEp != null)     setCurrentEp(data.currentEp);
       } catch (err) {
-        // silently ignore — card still works, just starts blank
         console.warn("Could not load anime status:", err);
       }
     };
-
-    loadStatus();
+    load();
   }, [animeId]);
 
-  // ---------------- SAVE ----------------
+  // ---- Save ----
   const handleSave = async () => {
     const username = localStorage.getItem("username");
-
-    if (!username) {
-      alert("You must be logged in.");
-      return;
-    }
+    if (!username) { alert("You must be logged in."); return; }
 
     try {
-      const res = await fetch(`${API}/save-anime`, {
+      const res  = await fetch(`${API}/save-anime`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username,
-          anime: {
-            id: animeId,
-            title: anime.title,
-            image: anime.image,
-            url: anime.url
-          }
+          anime: { id: animeId, title: anime.title, image: anime.image, url: anime.url }
         })
       });
-
       const data = await res.json();
-
       if (res.ok) {
-        setSavedMsg("✅ Saved!");
+        setSavedMsg("Saved!");
         setTimeout(() => setSavedMsg(""), 2500);
       } else if (res.status === 409) {
-        // 409 = duplicate — show friendly message instead of an alert
         setSavedMsg("Already in your list!");
         setTimeout(() => setSavedMsg(""), 2500);
       } else {
-        alert(`❌ Save failed: ${data.message || "unknown error"}`);
+        alert(`Save failed: ${data.message || "unknown error"}`);
       }
     } catch (err) {
       console.error("SAVE ERROR:", err);
-      alert("Network/server error saving anime");
     }
   };
 
-  // ---------------- WATCHED ----------------
+  // ---- Watched toggle ----
   const handleWatched = async (e) => {
     const value = e.target.checked;
     setWatched(value);
+    // If they mark as watched and we know the total, jump progress to 100%
+    if (value && totalEps) setCurrentEp(totalEps);
 
     const username = localStorage.getItem("username");
     if (!username) return;
-
     try {
       await fetch(`${API}/watch-status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, animeId, watched: value })
       });
-    } catch (err) {
-      console.error("Watch status error:", err);
-    }
+    } catch (err) { console.error(err); }
   };
 
-  // ---------------- RATING ----------------
+  // ---- Rating ----
   const handleRating = async (e) => {
     const value = Number(e.target.value);
     if (value < 1 || value > 10) return;
     setRatingValue(value);
-
     const username = localStorage.getItem("username");
     if (!username) return;
-
     try {
       const res = await fetch(`${API}/rate-anime`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, animeId, rating: value })
       });
-
       if (res.ok) {
-        setRatingMsg("✅ Rated!");
+        setRatingMsg("Rated!");
         setTimeout(() => setRatingMsg(""), 2500);
       }
-    } catch (err) {
-      console.error("Rating error:", err);
-    }
+    } catch (err) { console.error(err); }
   };
 
-  // ---------------- SIMILAR ----------------
-  const handleSimilar = () => {
-    if (!animeId) {
-      console.warn("No animeId found for similarity request");
-      return;
+  // ---- Episode progress ----
+  const handleEpChange = async (e) => {
+    const raw   = parseInt(e.target.value, 10);
+    const value = isNaN(raw) ? 0 : Math.max(0, totalEps ? Math.min(raw, totalEps) : raw);
+    setCurrentEp(value);
+
+    // Auto-check watched if they reach the last episode
+    if (totalEps && value >= totalEps && !watched) {
+      setWatched(true);
+      const username = localStorage.getItem("username");
+      if (username) {
+        await fetch(`${API}/watch-status`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, animeId, watched: true })
+        });
+      }
     }
-    onSimilarClick(animeId);
+
+    const username = localStorage.getItem("username");
+    if (!username) return;
+    try {
+      await fetch(`${API}/episode-progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, animeId, currentEp: value })
+      });
+    } catch (err) { console.error(err); }
   };
 
-  const episodeDisplay = anime.episodes != null ? `${anime.episodes} eps` : "? eps";
+  const progressPct = totalEps && currentEp
+    ? Math.min(100, Math.round((currentEp / totalEps) * 100))
+    : 0;
+
+  const episodeLabel = totalEps ? `${totalEps} eps` : "? eps";
 
   return (
-    <div className="card" style={{ maxWidth: "220px", margin: "0 auto" }}>
+    <div className="am-anime-card">
 
-      {/* IMAGE + TITLE */}
-      <a href={anime.url || "#"} target="_blank" rel="noreferrer">
+      {/* Image + link */}
+      <a href={anime.url || "#"} target="_blank" rel="noreferrer" style={{ position: "relative", display: "block" }}>
         <img
           src={anime.image || ""}
           alt={anime.title || "Anime"}
-          style={{
-            width: "100%",
-            height: "260px",
-            objectFit: "cover",
-            borderRadius: "8px"
-          }}
+          className="am-anime-card__img"
         />
-        <h3 style={{ fontSize: "14px", marginTop: "8px" }}>
-          {anime.title || "Unknown Title"}
-        </h3>
+        {/* Rating badge */}
+        <div style={{
+          position: "absolute", top: "8px", right: "8px",
+          background: "rgba(15,14,23,0.85)",
+          border: "1px solid rgba(255,209,102,0.4)",
+          color: "var(--yellow)",
+          fontSize: "11px", fontWeight: 800,
+          padding: "3px 8px", borderRadius: "20px",
+          backdropFilter: "blur(4px)"
+        }}>
+          ★ {anime.rating ?? anime.score ?? "N/A"}
+        </div>
       </a>
 
-      {/* COMMUNITY RATING */}
-      <p style={{ fontSize: "12px", opacity: 0.8 }}>
-        ⭐ {anime.rating ?? anime.score ?? "N/A"}
-      </p>
+      <div className="am-anime-card__body">
 
-      {/* EPISODES */}
-      <p style={{ fontSize: "12px", opacity: 0.8 }}>
-        📺 {episodeDisplay}
-      </p>
+        <div className="am-anime-card__title">
+          {anime.title || "Unknown Title"}
+        </div>
 
-      {/* SAVE BUTTON */}
-      <button
-        onClick={handleSave}
-        style={{
-          marginTop: "6px",
-          width: "100%",
-          cursor: "pointer",
-          backgroundColor: "#4CAF50",
-          color: "white",
-          border: "none",
-          padding: "6px",
-          borderRadius: "6px"
-        }}
-      >
-        ⭐ Save to Profile
-      </button>
+        <div className="am-anime-card__meta">
+          <span className="am-anime-card__eps">📺 {episodeLabel}</span>
+        </div>
 
-      {savedMsg && (
-        <p style={{ fontSize: "11px", color: "#4CAF50", margin: "4px 0 0" }}>
-          {savedMsg}
-        </p>
-      )}
+        {/* Episode progress bar */}
+        {(totalEps || currentEp > 0) && (
+          <div className="am-progress-wrap">
+            <div className="am-progress-label">
+              <span>Progress</span>
+              <span>{progressPct}%</span>
+            </div>
+            <div className="am-progress-bar">
+              <div className="am-progress-fill" style={{ width: `${progressPct}%` }} />
+            </div>
+            <div className="am-progress-input">
+              <span className="am-ep-sep">Ep</span>
+              <input
+                type="number"
+                min="0"
+                max={totalEps || 9999}
+                value={currentEp || ""}
+                placeholder="0"
+                onChange={handleEpChange}
+              />
+              {totalEps && (
+                <span className="am-ep-sep">/ {totalEps}</span>
+              )}
+            </div>
+          </div>
+        )}
 
-      {/* WATCHED CHECKBOX */}
-      <label style={{ fontSize: "12px", marginTop: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+        {/* Watched toggle */}
+        <label className="am-toggle-row" style={{ marginTop: "8px" }}>
+          <input
+            type="checkbox"
+            className="am-toggle"
+            checked={watched}
+            onChange={handleWatched}
+          />
+          <span className="am-toggle-label">
+            {watched ? "Watched ✓" : "Not watched"}
+          </span>
+        </label>
+
+        {/* Personal rating */}
         <input
-          type="checkbox"
-          checked={watched}
-          onChange={handleWatched}
+          type="number"
+          min="1"
+          max="10"
+          placeholder="Rate it 1–10"
+          value={rating}
+          onChange={handleRating}
+          className="am-input"
+          style={{ marginTop: "6px" }}
         />
-        Watched
-      </label>
+        {ratingMsg && <p className="am-msg-success">{ratingMsg}</p>}
 
-      {/* RATING INPUT */}
-      <input
-        type="number"
-        min="1"
-        max="10"
-        placeholder="Your rating (1-10)"
-        value={rating}
-        onChange={handleRating}
-        style={{
-          marginTop: "6px",
-          padding: "4px",
-          width: "100%",
-          boxSizing: "border-box"
-        }}
-      />
+        {/* Action buttons */}
+        <button onClick={handleSave} className="am-btn am-btn-coral am-btn-full am-btn-sm" style={{ marginTop: "8px" }}>
+          ⭐ Save to Profile
+        </button>
+        {savedMsg && <p className="am-msg-info">{savedMsg}</p>}
 
-      {ratingMsg && (
-        <p style={{ fontSize: "11px", color: "#4CAF50", margin: "4px 0 0" }}>
-          {ratingMsg}
-        </p>
-      )}
+        <button
+          onClick={() => animeId && onSimilarClick(animeId)}
+          className="am-btn am-btn-ghost am-btn-full am-btn-sm"
+          style={{ marginTop: "5px" }}
+        >
+          Find Similar
+        </button>
 
-      {/* FIND SIMILAR BUTTON */}
-      <button
-        onClick={handleSimilar}
-        style={{
-          marginTop: "6px",
-          width: "100%",
-          cursor: "pointer"
-        }}
-      >
-        Find Similar
-      </button>
-
+      </div>
     </div>
   );
 }

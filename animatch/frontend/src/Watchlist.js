@@ -5,46 +5,39 @@ const API = "https://animatch-ofks.onrender.com";
 
 function Watchlist() {
   const [savedAnime, setSavedAnime] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all"); // "all" | "watched" | "unwatched"
-  const [removeMsg, setRemoveMsg] = useState("");
+  const [loading, setLoading]       = useState(true);
+  const [filter, setFilter]         = useState("all");
 
   useEffect(() => {
     const username = localStorage.getItem("username");
-    if (!username) {
-      window.location.hash = "/";
-      return;
-    }
+    if (!username) { window.location.hash = "/"; return; }
     fetchWatchlist(username);
   }, []);
 
   const fetchWatchlist = async (username) => {
     setLoading(true);
     try {
-      // Pull saved anime + their watch/rating status in one go
       const [savedRes, statusRes] = await Promise.all([
         fetch(`${API}/saved-anime/${username}`),
         fetch(`${API}/all-status/${username}`)
       ]);
-
-      const saved = await savedRes.json();
+      const saved    = await savedRes.json();
       const statuses = statusRes.ok ? await statusRes.json() : [];
 
-      // Merge status data into each anime object
       const statusMap = {};
       statuses.forEach(s => { statusMap[s.animeId] = s; });
 
       const merged = (Array.isArray(saved) ? saved : []).map(anime => ({
         ...anime,
-        id: anime.animeId,
-        image: anime.image,
-        watched: statusMap[anime.animeId]?.watched || 0,
-        userRating: statusMap[anime.animeId]?.rating || null
+        id:         anime.animeId,
+        watched:    statusMap[anime.animeId]?.watched || 0,
+        userRating: statusMap[anime.animeId]?.rating  || null,
+        currentEp:  statusMap[anime.animeId]?.currentEp || 0
       }));
 
       setSavedAnime(merged);
     } catch (err) {
-      console.error("Watchlist fetch error:", err);
+      console.error(err);
       setSavedAnime([]);
     }
     setLoading(false);
@@ -58,15 +51,12 @@ function Watchlist() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, animeId })
       });
-      if (res.ok) {
-        setSavedAnime(prev => prev.filter(a => a.animeId !== animeId));
-        setRemoveMsg("Removed!");
-        setTimeout(() => setRemoveMsg(""), 2000);
-      }
-    } catch (err) {
-      console.error("Remove error:", err);
-    }
+      if (res.ok) setSavedAnime(prev => prev.filter(a => a.animeId !== animeId));
+    } catch (err) { console.error(err); }
   };
+
+  const watchedCount   = savedAnime.filter(a => a.watched).length;
+  const unwatchedCount = savedAnime.filter(a => !a.watched).length;
 
   const filtered = savedAnime.filter(anime => {
     if (filter === "watched")   return anime.watched;
@@ -74,86 +64,59 @@ function Watchlist() {
     return true;
   });
 
-  if (loading) return <p style={{ padding: "20px" }}>Loading your watchlist...</p>;
+  if (loading) return <div className="am-loading">Loading your watchlist...</div>;
 
   return (
-    <div style={{ padding: "20px" }}>
+    <div className="am-page">
 
-      {/* HEADER */}
-      <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "6px" }}>
-        <button onClick={() => (window.location.hash = "/dashboard")}>
-          ⬅ Back to Dashboard
-        </button>
-        <h1 style={{ margin: 0 }}>My Watchlist</h1>
+      {/* Nav */}
+      <nav className="am-nav">
+        <div className="am-logo"><span className="ani">Ani</span><span className="match">Match</span></div>
+        <button className="am-btn am-btn-ghost am-btn-sm" onClick={() => (window.location.hash = "/dashboard")}>⬅ Dashboard</button>
+        <button className="am-btn am-btn-coral am-btn-sm" onClick={() => (window.location.hash = "/quiz")}>📝 Quiz</button>
+        <button className="am-btn am-btn-purple am-btn-sm" onClick={() => (window.location.hash = "/search")}>🔍 Search</button>
+      </nav>
+
+      <div style={{ marginBottom: "20px" }}>
+        <h1>My <span style={{ color: "var(--teal)" }}>Watchlist</span></h1>
+        <p style={{ marginTop: "4px", fontSize: "13px" }}>{savedAnime.length} saved · {watchedCount} watched · {unwatchedCount} to watch</p>
       </div>
 
-      {removeMsg && (
-        <p style={{ color: "#4CAF50", fontSize: "13px" }}>{removeMsg}</p>
-      )}
-
-      {/* FILTER TABS */}
-      <div style={{ display: "flex", gap: "8px", margin: "16px 0" }}>
-        {["all", "watched", "unwatched"].map(f => (
+      {/* Filter tabs */}
+      <div className="am-tabs" style={{ marginBottom: "24px" }}>
+        {[
+          { key: "all",       label: `All (${savedAnime.length})` },
+          { key: "watched",   label: `Watched (${watchedCount})` },
+          { key: "unwatched", label: `To Watch (${unwatchedCount})` }
+        ].map(t => (
           <button
-            key={f}
-            onClick={() => setFilter(f)}
-            style={{
-              padding: "6px 14px",
-              borderRadius: "20px",
-              border: "1px solid #ccc",
-              cursor: "pointer",
-              backgroundColor: filter === f ? "#333" : "transparent",
-              color: filter === f ? "#fff" : "inherit",
-              fontWeight: filter === f ? "500" : "400"
-            }}
+            key={t.key}
+            className={`am-tab${filter === t.key ? " active" : ""}`}
+            onClick={() => setFilter(t.key)}
           >
-            {f === "all" ? `All (${savedAnime.length})`
-              : f === "watched" ? `Watched (${savedAnime.filter(a => a.watched).length})`
-              : `Unwatched (${savedAnime.filter(a => !a.watched).length})`}
+            {t.label}
           </button>
         ))}
       </div>
 
-      {/* EMPTY STATE */}
       {filtered.length === 0 ? (
-        <p>
-          {filter === "all"
-            ? 'No saved anime yet. Hit "Save to Profile" on any anime card!'
-            : `No ${filter} anime yet.`}
-        </p>
+        <div className="am-empty">
+          <h3>{filter === "all" ? "Nothing saved yet" : `No ${filter} anime`}</h3>
+          <p>{filter === "all" ? "Save anime from the quiz or search to build your list!" : "Try switching the filter above."}</p>
+        </div>
       ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-            gap: "20px",
-            marginTop: "10px"
-          }}
-        >
+        <div className="am-grid">
           {filtered.map(anime => (
-            <div key={anime.animeId} style={{ display: "flex", flexDirection: "column" }}>
+            <div key={anime.animeId} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               <AnimeCard anime={anime} />
-
-              {/* User's own rating badge (read from DB, shown above the remove button) */}
               {anime.userRating && (
-                <p style={{ fontSize: "12px", margin: "4px 0 0", color: "#888" }}>
-                  Your rating: <strong>{anime.userRating}/10</strong>
+                <p style={{ fontSize: "11px", color: "var(--text-dim)", fontWeight: 700, textAlign: "center" }}>
+                  Your rating: <span style={{ color: "var(--yellow)" }}>{anime.userRating}/10</span>
                 </p>
               )}
-
               <button
                 onClick={() => handleRemove(anime.animeId)}
-                style={{
-                  marginTop: "6px",
-                  width: "100%",
-                  cursor: "pointer",
-                  backgroundColor: "#e74c3c",
-                  color: "white",
-                  border: "none",
-                  padding: "6px",
-                  borderRadius: "6px",
-                  fontSize: "12px"
-                }}
+                className="am-btn am-btn-red am-btn-sm am-btn-full"
               >
                 🗑 Remove
               </button>

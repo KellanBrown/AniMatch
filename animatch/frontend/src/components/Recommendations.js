@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import AnimeCard from "./AnimeCard";
 
 const API = "https://animatch-ofks.onrender.com";
+const ALL_GENRES = ["Action", "Comedy", "Fantasy", "Romance", "Drama", "Horror", "SciFi"];
 
 function Recommendations() {
   const location = useLocation();
@@ -10,192 +11,151 @@ function Recommendations() {
   const { answers } = location.state || {};
 
   const [recommendationStack, setRecommendationStack] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  const [watchingState, setWatchingState] = useState({});
-  const [ratingState, setRatingState] = useState({});
+  const [loading, setLoading]       = useState(true);
+  const [refetching, setRefetching] = useState(false);
+  const [quizGenres, setQuizGenres]     = useState([]);
+  const [activeGenres, setActiveGenres] = useState([]);
+  const [quizParams, setQuizParams]     = useState({});
 
   useEffect(() => {
     if (!answers) return;
-
-    let mood = null;
-    let genres = [];
-    let maxEpisodes = null;
-    let hiddenGem = false;
+    let mood = null, genres = [], maxEpisodes = null, hiddenGem = false;
 
     answers.forEach(answer => {
-      if (["Excited", "Chill", "Adventurous", "Romantic", "Sad", "Comedic"].includes(answer)) {
-        mood = answer;
-      }
-      if (["Action", "Comedy", "Fantasy", "Romance", "Drama", "Horror", "SciFi"].includes(answer)) {
-        genres.push(answer);
-      }
-      if (answer.includes("Short")) maxEpisodes = 25;
+      if (["Excited","Chill","Adventurous","Romantic","Sad","Comedic"].includes(answer)) mood = answer;
+      if (ALL_GENRES.includes(answer)) genres.push(answer);
+      if (answer.includes("Short"))  maxEpisodes = 25;
       if (answer.includes("Medium")) maxEpisodes = 50;
-      if (answer.includes("Long")) maxEpisodes = 100;
-      if (answer === "Hidden Gems") hiddenGem = true;
+      if (answer.includes("Long"))   maxEpisodes = 100;
+      if (answer === "Hidden Gems")  hiddenGem = true;
     });
 
     if (genres.length === 0) genres = ["Action"];
-
-    const fetchRecommendations = async () => {
-      try {
-        const res = await fetch(`${API}/recommend`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mood, genres, maxEpisodes, hiddenGem })
-        });
-
-        const data = await res.json();
-
-        setRecommendationStack([
-          {
-            title: "Your Anime Recommendations",
-            data: Array.isArray(data) ? data : []
-          }
-        ]);
-
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchRecommendations();
+    const params = { mood, genres, maxEpisodes, hiddenGem };
+    setQuizParams(params);
+    setQuizGenres(genres);
+    setActiveGenres(genres);
+    fetchRecs(params, "Your Recommendations", true);
   }, [answers]);
 
-  // ------------------- WATCHED -------------------
-  const toggleWatched = async (anime, value) => {
-    const username = localStorage.getItem("username");
-
-    setWatchingState(prev => ({
-      ...prev,
-      [anime.id]: value
-    }));
-
+  const fetchRecs = async (params, title, isInitial = false) => {
+    if (isInitial) setLoading(true);
+    else           setRefetching(true);
     try {
-      await fetch(`${API}/watch-status`, {
+      const res  = await fetch(`${API}/recommend`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username,
-          animeId: anime.id,
-          watched: value
-        })
+        body: JSON.stringify(params)
       });
+      const data    = await res.json();
+      const results = Array.isArray(data) ? data : [];
+      if (isInitial) {
+        setRecommendationStack([{ title, data: results }]);
+      } else {
+        setRecommendationStack(prev => [{ title, data: results }, ...prev.slice(1)]);
+      }
     } catch (err) {
-      console.error(err);
+      console.error("Fetch recs failed:", err);
+    } finally {
+      setLoading(false);
+      setRefetching(false);
     }
   };
 
-  // ------------------- RATING -------------------
-  const setRating = async (anime, value) => {
-    const username = localStorage.getItem("username");
-
-    setRatingState(prev => ({
-      ...prev,
-      [anime.id]: value
-    }));
-
-    try {
-      await fetch(`${API}/rate-anime`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username,
-          animeId: anime.id,
-          rating: value
-        })
-      });
-    } catch (err) {
-      console.error(err);
-    }
+  const handleGenreToggle = (genre) => {
+    const newGenres = activeGenres.includes(genre)
+      ? activeGenres.filter(g => g !== genre)
+      : [...activeGenres, genre];
+    setActiveGenres(newGenres);
+    if (newGenres.length === 0) return;
+    fetchRecs({ ...quizParams, genres: newGenres }, `Results — ${newGenres.join(", ")}`, false);
   };
 
-  // ------------------- SIMILAR ANIME -------------------
+  const handleReset = () => {
+    setActiveGenres(quizGenres);
+    fetchRecs(quizParams, "Your Recommendations", false);
+  };
+
   const handleSimilarClick = async (animeId) => {
     try {
-      // FIX: use Jikan's recommendations endpoint instead of /search
-      // /search does a text query — passing a numeric ID there does nothing useful
-      const res = await fetch(`https://api.jikan.moe/v4/anime/${animeId}/recommendations`);
+      const res  = await fetch(`https://api.jikan.moe/v4/anime/${animeId}/recommendations`);
       const data = await res.json();
-
       const similar = (data.data || []).slice(0, 12).map(item => ({
-        id: item.entry.mal_id,
-        title: item.entry.title,
+        id: item.entry.mal_id, title: item.entry.title,
         image: item.entry.images?.jpg?.image_url || "",
-        rating: "N/A",
-        url: item.entry.url,
-        episodes: null
+        rating: "N/A", url: item.entry.url, episodes: null
       }));
-
-      // FIX: append the similar section rather than replacing everything,
-      // so the user can still see their original recommendations above
-      setRecommendationStack(prev => [
-        ...prev,
-        { title: "Similar Anime", data: similar }
-      ]);
-
-    } catch (err) {
-      console.error("Similar fetch failed:", err);
-    }
+      setRecommendationStack(prev => [...prev, { title: "Similar Anime", data: similar }]);
+    } catch (err) { console.error("Similar fetch failed:", err); }
   };
 
-  if (!answers) return <p>Please take the quiz first.</p>;
-  if (loading) return <p>Loading recommendations...</p>;
+  const isModified = JSON.stringify([...activeGenres].sort()) !== JSON.stringify([...quizGenres].sort());
+
+  if (!answers) return <div className="am-loading">Please take the quiz first.</div>;
+  if (loading)  return <div className="am-loading">Finding your anime...</div>;
 
   return (
-    <div style={{ minHeight: "100vh", padding: "20px" }}>
-      <button onClick={() => navigate("/dashboard")}>
-        ⬅ Back to Profile
-      </button>
+    <div className="am-page">
 
+      {/* Nav */}
+      <nav className="am-nav">
+        <div className="am-logo"><span className="ani">Ani</span><span className="match">Match</span></div>
+        <button className="am-btn am-btn-ghost am-btn-sm" onClick={() => navigate("/dashboard")}>⬅ Dashboard</button>
+        <button className="am-btn am-btn-coral am-btn-sm" onClick={() => navigate("/quiz")}>🔄 Retake Quiz</button>
+      </nav>
+
+      <h1 style={{ marginBottom: "6px" }}>Your <span style={{ color: "var(--coral)" }}>Picks</span></h1>
+
+      {/* Genre filter */}
+      <div style={{ margin: "16px 0 24px" }}>
+        <p style={{ fontSize: "12px", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-dim)", marginBottom: "10px" }}>
+          Filter by genre
+        </p>
+        <div className="am-pills">
+          {ALL_GENRES.map(genre => {
+            const isActive    = activeGenres.includes(genre);
+            const isQuizGenre = quizGenres.includes(genre);
+            return (
+              <button
+                key={genre}
+                onClick={() => handleGenreToggle(genre)}
+                className={`am-pill ${isActive ? (isQuizGenre ? "active-coral" : "active-teal") : ""}`}
+              >
+                {genre}
+              </button>
+            );
+          })}
+          {isModified && (
+            <button className="am-pill" onClick={handleReset} style={{ borderStyle: "dashed" }}>
+              ↩ Reset
+            </button>
+          )}
+        </div>
+        {refetching && <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "10px" }}>Updating...</p>}
+      </div>
+
+      {/* Results */}
       {recommendationStack.map((section, index) => (
-        <div key={index}>
-          <h2>{section.title}</h2>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-              gap: "20px",
-              marginTop: "20px"
-            }}
-          >
-            {(section.data || []).map(anime => (
-              <div key={anime.id} style={{ display: "flex", flexDirection: "column" }}>
-
-                <AnimeCard
-                  anime={anime}
-                  onSimilarClick={handleSimilarClick}
-                />
-
-                <label style={{ fontSize: "12px", marginTop: "6px" }}>
-                  <input
-                    type="checkbox"
-                    checked={watchingState[anime.id] || false}
-                    onChange={(e) => toggleWatched(anime, e.target.checked)}
-                  />
-                  {" "}Watched
-                </label>
-
-                <input
-                  type="number"
-                  min="1"
-                  max="10"
-                  placeholder="Rate 1-10"
-                  value={ratingState[anime.id] || ""}
-                  onChange={(e) => setRating(anime, Number(e.target.value))}
-                  style={{
-                    marginTop: "6px",
-                    padding: "4px"
-                  }}
-                />
-
-              </div>
-            ))}
+        <div key={index} style={{ marginBottom: "40px" }}>
+          <div className="am-section-header">
+            <h2>{section.title}</h2>
+            <span style={{ fontSize: "12px", color: "var(--text-dim)", fontWeight: 700 }}>
+              {section.data.length} results
+            </span>
           </div>
+
+          {section.data.length === 0 ? (
+            <div className="am-empty">
+              <h3>No results</h3>
+              <p>Try adding more genres above!</p>
+            </div>
+          ) : (
+            <div className="am-grid">
+              {section.data.map(anime => (
+                <AnimeCard key={anime.id} anime={anime} onSimilarClick={handleSimilarClick} />
+              ))}
+            </div>
+          )}
         </div>
       ))}
     </div>

@@ -1,0 +1,494 @@
+/* ============================================================
+   AniMatch — Global Design System
+   Import this in index.js: import './animatch.css';
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Rajdhani:wght@600;700&display=swap');
+
+/* ---- CSS Variables ---- */
+:root {
+  --bg:         #0f0e17;
+  --surface:    #1a1828;
+  --surface2:   #232136;
+  --surface3:   #2c2a42;
+  --coral:      #ff6b4a;
+  --coral-dim:  rgba(255, 107, 74, 0.15);
+  --teal:       #00e5c0;
+  --teal-dim:   rgba(0, 229, 192, 0.12);
+  --purple:     #a78bfa;
+  --purple-dim: rgba(167, 139, 250, 0.12);
+  --yellow:     #ffd166;
+  --yellow-dim: rgba(255, 209, 102, 0.12);
+  --red:        #ff4d6d;
+  --red-dim:    rgba(255, 77, 109, 0.12);
+  --text:       #f0eeff;
+  --text-muted: #8b87a8;
+  --text-dim:   #5a5778;
+  --border:     rgba(167, 139, 250, 0.15);
+  --border-hover: rgba(167, 139, 250, 0.35);
+  --radius-sm:  8px;
+  --radius-md:  12px;
+  --radius-lg:  18px;
+  --radius-xl:  24px;
+}
+
+/* ---- Base Reset ---- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Nunito', sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* ---- Typography ---- */
+h1, h2, h3 {
+  font-family: 'Rajdhani', sans-serif;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+}
+h1 { font-size: 2.2rem; font-weight: 700; color: var(--text); }
+h2 { font-size: 1.6rem; font-weight: 700; color: var(--text); }
+h3 { font-size: 1.15rem; font-weight: 600; color: var(--text); }
+p  { color: var(--text-muted); }
+a  { color: var(--purple); text-decoration: none; }
+a:hover { color: var(--coral); }
+
+/* ---- Layout ---- */
+.am-page {
+  min-height: 100vh;
+  padding: 28px 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* ---- Logo ---- */
+.am-logo {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.8rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.am-logo .ani  { color: var(--coral); }
+.am-logo .match { color: var(--teal); }
+
+/* ---- Buttons ---- */
+.am-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: var(--radius-sm);
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  transition: transform 0.15s, opacity 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+.am-btn:active { transform: scale(0.97); }
+
+.am-btn-coral  { background: var(--coral); color: #fff; }
+.am-btn-coral:hover  { opacity: 0.88; }
+
+.am-btn-teal   { background: var(--teal-dim); color: var(--teal); border: 1px solid rgba(0,229,192,0.3); }
+.am-btn-teal:hover   { background: rgba(0,229,192,0.22); }
+
+.am-btn-purple { background: var(--purple-dim); color: var(--purple); border: 1px solid rgba(167,139,250,0.25); }
+.am-btn-purple:hover { background: rgba(167,139,250,0.2); }
+
+.am-btn-red    { background: var(--red-dim); color: var(--red); border: 1px solid rgba(255,77,109,0.25); }
+.am-btn-red:hover    { background: rgba(255,77,109,0.22); }
+
+.am-btn-ghost  { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+.am-btn-ghost:hover  { border-color: var(--border-hover); color: var(--text); }
+
+.am-btn-sm { padding: 6px 12px; font-size: 12px; }
+.am-btn-full { width: 100%; }
+
+/* ---- Cards ---- */
+.am-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.am-card:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-2px);
+}
+
+/* ---- Anime Card ---- */
+.am-anime-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.am-anime-card:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-3px);
+}
+.am-anime-card__img {
+  width: 100%;
+  height: 260px;
+  object-fit: cover;
+  display: block;
+}
+.am-anime-card__body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+.am-anime-card__title {
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.3;
+}
+.am-anime-card__meta {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.am-anime-card__rating { color: var(--yellow); font-weight: 700; }
+.am-anime-card__eps    { color: var(--text-muted); }
+
+/* ---- Stat Boxes ---- */
+.am-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+  margin: 20px 0;
+}
+.am-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 10px;
+  text-align: center;
+}
+.am-stat__val {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.am-stat__lbl {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.am-stat--coral  .am-stat__val { color: var(--coral); }
+.am-stat--teal   .am-stat__val { color: var(--teal); }
+.am-stat--yellow .am-stat__val { color: var(--yellow); }
+.am-stat--purple .am-stat__val { color: var(--purple); }
+
+/* ---- Genre Pills ---- */
+.am-pills { display: flex; flex-wrap: wrap; gap: 7px; }
+.am-pill {
+  padding: 6px 15px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: 'Nunito', sans-serif;
+  transition: all 0.15s;
+}
+.am-pill:hover { border-color: var(--border-hover); color: var(--text); }
+.am-pill.active-coral  { background: var(--coral); color: #fff; border-color: var(--coral); }
+.am-pill.active-teal   { background: var(--teal); color: #0f0e17; border-color: var(--teal); }
+.am-pill.active-purple { background: var(--purple); color: #fff; border-color: var(--purple); }
+
+/* ---- Filter Tabs ---- */
+.am-tabs { display: flex; gap: 6px; }
+.am-tab {
+  padding: 7px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: 'Nunito', sans-serif;
+  transition: all 0.15s;
+}
+.am-tab:hover   { border-color: var(--border-hover); color: var(--text); }
+.am-tab.active  { background: var(--surface2); border-color: var(--purple); color: var(--purple); }
+
+/* ---- Inputs ---- */
+.am-input {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  padding: 8px 12px;
+  width: 100%;
+  transition: border-color 0.15s;
+}
+.am-input:focus {
+  outline: none;
+  border-color: var(--purple);
+}
+.am-input::placeholder { color: var(--text-dim); }
+
+/* ---- Toggle (watched checkbox) ---- */
+.am-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.am-toggle {
+  appearance: none;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.am-toggle::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 0.2s, background 0.2s;
+}
+.am-toggle:checked {
+  background: var(--teal-dim);
+  border-color: var(--teal);
+}
+.am-toggle:checked::after {
+  transform: translateX(16px);
+  background: var(--teal);
+}
+.am-toggle-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  transition: color 0.2s;
+}
+.am-toggle:checked + .am-toggle-label { color: var(--teal); }
+
+/* ---- Progress Bar (episode tracking) ---- */
+.am-progress-wrap {
+  margin-top: 6px;
+}
+.am-progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.am-progress-label span:last-child { color: var(--coral); }
+.am-progress-bar {
+  width: 100%;
+  height: 5px;
+  background: var(--surface3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.am-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--coral), var(--purple));
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.am-progress-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+}
+.am-progress-input input {
+  width: 54px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: 'Nunito', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 7px;
+  text-align: center;
+}
+.am-progress-input input:focus {
+  outline: none;
+  border-color: var(--coral);
+}
+.am-progress-input .am-ep-sep {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+/* ---- Section header ---- */
+.am-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+/* ---- Nav bar ---- */
+.am-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 14px 0;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.am-nav .am-logo { margin-right: auto; }
+
+/* ---- Grid ---- */
+.am-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 18px;
+}
+
+/* ---- Messages ---- */
+.am-msg-success { font-size: 11px; font-weight: 700; color: var(--teal); margin-top: 4px; }
+.am-msg-info    { font-size: 11px; font-weight: 700; color: var(--purple); margin-top: 4px; }
+.am-msg-error   { font-size: 11px; font-weight: 700; color: var(--red); margin-top: 4px; }
+
+/* ---- Empty state ---- */
+.am-empty {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--text-muted);
+}
+.am-empty h3 { color: var(--text-dim); margin-bottom: 8px; font-size: 1.1rem; }
+
+/* ---- Loading ---- */
+.am-loading {
+  text-align: center;
+  padding: 60px 24px;
+  color: var(--text-muted);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+/* ---- Quiz ---- */
+.am-quiz-wrap {
+  max-width: 540px;
+  margin: 60px auto;
+  text-align: center;
+}
+.am-quiz-progress {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin-bottom: 32px;
+}
+.am-quiz-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--surface3);
+  transition: background 0.2s;
+}
+.am-quiz-dot.done    { background: var(--teal); }
+.am-quiz-dot.current { background: var(--coral); }
+.am-quiz-q {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.7rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 28px;
+}
+.am-quiz-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
+.am-quiz-opt {
+  padding: 10px 22px;
+  border-radius: 20px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  transition: all 0.15s;
+}
+.am-quiz-opt:hover {
+  border-color: var(--coral);
+  color: var(--coral);
+  transform: translateY(-2px);
+}
+
+/* ---- Auth pages ---- */
+.am-auth-wrap {
+  max-width: 420px;
+  margin: 80px auto;
+}
+.am-auth-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 36px 32px;
+}
+.am-auth-card h2 {
+  font-size: 1.8rem;
+  margin-bottom: 6px;
+}
+.am-auth-card p {
+  margin-bottom: 24px;
+  font-size: 13px;
+}
+.am-field {
+  margin-bottom: 14px;
+}
+.am-field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 5px;
+}
+
+/* ---- Scrollbar ---- */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--purple-dim); }

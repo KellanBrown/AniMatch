@@ -4,53 +4,32 @@ import AnimeCard from "./AnimeCard";
 const API = "https://animatch-ofks.onrender.com";
 
 function Dashboard() {
-  const [user, setUser] = useState(null);
+  const [user, setUser]             = useState(null);
   const [savedAnime, setSavedAnime] = useState([]);
-  const [stats, setStats] = useState(null);
+  const [stats, setStats]           = useState(null);
   const [loadingAnime, setLoadingAnime] = useState(true);
 
   useEffect(() => {
     const username = localStorage.getItem("username");
-    if (!username) {
-      window.location.hash = "/";
-      return;
-    }
+    if (!username) { window.location.hash = "/"; return; }
 
     const fetchData = async () => {
-      // ---------------- USER INFO ----------------
       try {
-        const userRes = await fetch(`${API}/dashboard/${username}`);
+        const userRes  = await fetch(`${API}/dashboard/${username}`);
         const userData = await userRes.json();
         if (userRes.ok && userData.user) setUser(userData.user);
-      } catch (err) {
-        console.error("User fetch error:", err);
-      }
+      } catch (err) { console.error(err); }
 
-      // ---------------- SAVED ANIME ----------------
       try {
-        const savedRes = await fetch(`${API}/saved-anime/${username}`);
-        if (!savedRes.ok) {
-          setSavedAnime([]);
-          setLoadingAnime(false);
-          return;
-        }
-        const savedData = await savedRes.json();
+        const savedRes  = await fetch(`${API}/saved-anime/${username}`);
+        const savedData = savedRes.ok ? await savedRes.json() : [];
         setSavedAnime(Array.isArray(savedData) ? savedData : []);
-      } catch (err) {
-        console.error("Saved anime fetch error:", err);
-        setSavedAnime([]);
-      }
+      } catch (err) { setSavedAnime([]); }
 
-      // ---------------- USER STATS ----------------
       try {
         const statsRes = await fetch(`${API}/user-stats/${username}`);
-        if (statsRes.ok) {
-          const statsData = await statsRes.json();
-          setStats(statsData);
-        }
-      } catch (err) {
-        console.error("Stats fetch error:", err);
-      }
+        if (statsRes.ok) setStats(await statsRes.json());
+      } catch (err) { console.error(err); }
 
       setLoadingAnime(false);
     };
@@ -58,131 +37,79 @@ function Dashboard() {
     fetchData();
   }, []);
 
-  if (!user) return <p>Loading your profile...</p>;
+  if (!user) return <div className="am-loading">Loading your profile...</div>;
 
   return (
-    <div className="dashboard" style={{ padding: "20px" }}>
-      <h1>Welcome, {user.username}!</h1>
+    <div className="am-page">
 
-      {/* ---------------- PROFILE INFO ---------------- */}
-      <div className="profile-info">
-        <p><strong>Email:</strong> {user.email}</p>
-        <p><strong>Age:</strong> {user.age}</p>
-        <p><strong>Gender:</strong> {user.gender}</p>
+      {/* Nav */}
+      <nav className="am-nav">
+        <div className="am-logo"><span className="ani">Ani</span><span className="match">Match</span></div>
+        <button className="am-btn am-btn-teal am-btn-sm"   onClick={() => (window.location.hash = "/watchlist")}>📋 Watchlist</button>
+        <button className="am-btn am-btn-purple am-btn-sm" onClick={() => (window.location.hash = "/search")}>🔍 Search</button>
+        <button className="am-btn am-btn-coral am-btn-sm"  onClick={() => (window.location.hash = "/quiz")}>📝 Quiz</button>
+        <button className="am-btn am-btn-ghost am-btn-sm"  onClick={() => { localStorage.removeItem("username"); window.location.hash = "/"; }}>Logout</button>
+      </nav>
+
+      {/* Welcome */}
+      <div style={{ marginBottom: "24px" }}>
+        <h1>Welcome back, <span style={{ color: "var(--coral)" }}>{user.username}</span>!</h1>
+        <p style={{ marginTop: "4px", fontSize: "13px" }}>{user.email} · Age {user.age} · {user.gender}</p>
       </div>
 
-      {/* ---------------- STATS PANEL ---------------- */}
+      {/* Stats */}
       {stats && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
-            gap: "12px",
-            margin: "20px 0",
-            padding: "16px",
-            backgroundColor: "#f9f9f9",
-            borderRadius: "12px",
-            border: "1px solid #eee"
-          }}
-        >
-          <StatBox label="Saved" value={stats.totalSaved} emoji="📚" />
-          <StatBox label="Watched" value={stats.totalWatched} emoji="✅" />
-          <StatBox label="Unwatched" value={stats.totalUnwatched} emoji="🕐" />
-          <StatBox
-            label="Avg Rating"
-            value={stats.avgRating ? `${stats.avgRating}/10` : "—"}
-            emoji="⭐"
-          />
-          <StatBox
-            label="Top Genre"
-            value={stats.topGenre || "—"}
-            emoji="🎭"
-          />
+        <div className="am-stats">
+          <div className="am-stat am-stat--coral">
+            <div className="am-stat__val">{stats.totalSaved}</div>
+            <div className="am-stat__lbl">Saved</div>
+          </div>
+          <div className="am-stat am-stat--teal">
+            <div className="am-stat__val">{stats.totalWatched}</div>
+            <div className="am-stat__lbl">Watched</div>
+          </div>
+          <div className="am-stat am-stat--yellow">
+            <div className="am-stat__val">{stats.avgRating ?? "—"}</div>
+            <div className="am-stat__lbl">Avg Rating</div>
+          </div>
+          <div className="am-stat am-stat--purple">
+            <div className="am-stat__val" style={{ fontSize: "16px", paddingTop: "4px" }}>{stats.topGenre ?? "—"}</div>
+            <div className="am-stat__lbl">Top Genre</div>
+          </div>
         </div>
       )}
 
-      {/* ---------------- NAV BUTTONS ---------------- */}
-      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", margin: "15px 0" }}>
-        <button onClick={() => (window.location.hash = "/watchlist")}>
-          📋 My Watchlist
-        </button>
-
-        <button onClick={() => (window.location.hash = "/search")}>
-          🔍 Search Anime
-        </button>
-
-        <button onClick={() => (window.location.hash = "/quiz")}>
-          📝 Take Quiz
-        </button>
-
-        <button
-          onClick={() => {
-            localStorage.removeItem("username");
-            window.location.hash = "/";
-          }}
-          style={{ marginLeft: "auto" }}
-        >
-          Logout
-        </button>
-      </div>
-
-      {/* ---------------- SAVED ANIME (PREVIEW — first 6) ---------------- */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      {/* Recently Saved */}
+      <div className="am-section-header" style={{ marginTop: "32px" }}>
         <h2>Recently Saved</h2>
         {savedAnime.length > 6 && (
-          <button
-            onClick={() => (window.location.hash = "/watchlist")}
-            style={{ fontSize: "13px" }}
-          >
+          <button className="am-btn am-btn-ghost am-btn-sm" onClick={() => (window.location.hash = "/watchlist")}>
             View all →
           </button>
         )}
       </div>
 
       {loadingAnime ? (
-        <p>Loading saved anime...</p>
+        <div className="am-loading">Loading saved anime...</div>
       ) : savedAnime.length === 0 ? (
-        <p>No saved anime yet. Click "Save to Profile" on any anime card!</p>
+        <div className="am-empty">
+          <h3>Nothing saved yet</h3>
+          <p>Take the quiz or search for anime to get started!</p>
+          <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "16px" }}>
+            <button className="am-btn am-btn-coral" onClick={() => (window.location.hash = "/quiz")}>📝 Take Quiz</button>
+            <button className="am-btn am-btn-purple" onClick={() => (window.location.hash = "/search")}>🔍 Search</button>
+          </div>
+        </div>
       ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-            gap: "20px",
-            marginTop: "20px"
-          }}
-        >
-          {/* Show only the 6 most recently saved on dashboard — full list is on Watchlist */}
+        <div className="am-grid">
           {savedAnime.slice(0, 6).map((anime) => (
             <AnimeCard
               key={anime.animeId || anime.id}
-              anime={{
-                ...anime,
-                id: anime.animeId,
-              }}
+              anime={{ ...anime, id: anime.animeId }}
             />
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-// Small reusable stat box component
-function StatBox({ label, value, emoji }) {
-  return (
-    <div
-      style={{
-        textAlign: "center",
-        padding: "12px 8px",
-        backgroundColor: "#fff",
-        borderRadius: "10px",
-        border: "1px solid #eee"
-      }}
-    >
-      <div style={{ fontSize: "22px" }}>{emoji}</div>
-      <div style={{ fontSize: "20px", fontWeight: "600", margin: "4px 0" }}>{value}</div>
-      <div style={{ fontSize: "11px", color: "#888", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</div>
     </div>
   );
 }
