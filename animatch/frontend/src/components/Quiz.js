@@ -26,12 +26,15 @@ function Quiz() {
   const navigate = useNavigate();
 
   const handleAnswer = (answer) => {
-    setAnswers([...answers, answer]);
+    // FIX: build the complete answers array first, then use it everywhere
+    const newAnswers = [...answers, answer];
+    setAnswers(newAnswers);
+
     if (current + 1 < questions.length) {
       setCurrent(current + 1);
     } else {
-      // Navigate to recommendations with answers
-      navigate("/recommendations", { state: { answers } });
+      // FIX: pass newAnswers (not the stale `answers` state) to navigate
+      navigate("/recommendations", { state: { answers: newAnswers } });
     }
   };
 

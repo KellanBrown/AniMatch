@@ -113,17 +113,28 @@ function Recommendations() {
     }
   };
 
-  // ⭐ FIX #1: ADD THIS (THIS WAS MISSING)
+  // ------------------- SIMILAR ANIME -------------------
   const handleSimilarClick = async (animeId) => {
     try {
-      const res = await fetch(`${API}/search?q=${animeId}`);
+      // FIX: use Jikan's recommendations endpoint instead of /search
+      // /search does a text query — passing a numeric ID there does nothing useful
+      const res = await fetch(`https://api.jikan.moe/v4/anime/${animeId}/recommendations`);
       const data = await res.json();
 
-      setRecommendationStack([
-        {
-          title: "Similar Anime",
-          data: Array.isArray(data) ? data : []
-        }
+      const similar = (data.data || []).slice(0, 12).map(item => ({
+        id: item.entry.mal_id,
+        title: item.entry.title,
+        image: item.entry.images?.jpg?.image_url || "",
+        rating: "N/A",
+        url: item.entry.url,
+        episodes: null
+      }));
+
+      // FIX: append the similar section rather than replacing everything,
+      // so the user can still see their original recommendations above
+      setRecommendationStack(prev => [
+        ...prev,
+        { title: "Similar Anime", data: similar }
       ]);
 
     } catch (err) {
@@ -155,7 +166,6 @@ function Recommendations() {
             {(section.data || []).map(anime => (
               <div key={anime.id} style={{ display: "flex", flexDirection: "column" }}>
 
-                {/* ⭐ FIX #2: PASS THE FUNCTION DOWN */}
                 <AnimeCard
                   anime={anime}
                   onSimilarClick={handleSimilarClick}

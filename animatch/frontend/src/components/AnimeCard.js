@@ -1,9 +1,15 @@
-import React from "react";
+import React, { useState } from "react";
 
 const API = "https://animatch-ofks.onrender.com";
 
 function AnimeCard({ anime = {}, onSimilarClick = () => {} }) {
   const animeId = anime.id ?? anime.mal_id;
+
+  // Local state so the card is interactive immediately without waiting for the server
+  const [watched, setWatched] = useState(false);
+  const [rating, setRatingValue] = useState("");
+  const [savedMsg, setSavedMsg] = useState("");
+  const [ratingMsg, setRatingMsg] = useState("");
 
   // ---------------- SAVE ----------------
   const handleSave = async () => {
@@ -32,7 +38,8 @@ function AnimeCard({ anime = {}, onSimilarClick = () => {} }) {
       const data = await res.json();
 
       if (res.ok) {
-        alert("✅ Saved to your profile!");
+        setSavedMsg("✅ Saved!");
+        setTimeout(() => setSavedMsg(""), 2500);
       } else {
         alert(`❌ Save failed: ${data.message || "unknown error"}`);
       }
@@ -42,19 +49,67 @@ function AnimeCard({ anime = {}, onSimilarClick = () => {} }) {
     }
   };
 
+  // ---------------- WATCHED ----------------
+  const handleWatched = async (e) => {
+    const value = e.target.checked;
+    setWatched(value);
+
+    const username = localStorage.getItem("username");
+    if (!username) return;
+
+    try {
+      await fetch(`${API}/watch-status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, animeId, watched: value })
+      });
+    } catch (err) {
+      console.error("Watch status error:", err);
+    }
+  };
+
+  // ---------------- RATING ----------------
+  const handleRating = async (e) => {
+    const value = Number(e.target.value);
+
+    // Only accept values 1-10
+    if (value < 1 || value > 10) return;
+    setRatingValue(value);
+
+    const username = localStorage.getItem("username");
+    if (!username) return;
+
+    try {
+      const res = await fetch(`${API}/rate-anime`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, animeId, rating: value })
+      });
+
+      if (res.ok) {
+        setRatingMsg("✅ Rated!");
+        setTimeout(() => setRatingMsg(""), 2500);
+      }
+    } catch (err) {
+      console.error("Rating error:", err);
+    }
+  };
+
   // ---------------- SIMILAR ----------------
   const handleSimilar = () => {
     if (!animeId) {
       console.warn("No animeId found for similarity request");
       return;
     }
-
     onSimilarClick(animeId);
   };
 
+  // FIX: episode display — show "?" if null/undefined instead of "Unknown"
+  const episodeDisplay = anime.episodes != null ? `${anime.episodes} eps` : "? eps";
+
   return (
     <div className="card" style={{ maxWidth: "220px", margin: "0 auto" }}>
-      
+
       {/* IMAGE + TITLE */}
       <a href={anime.url || "#"} target="_blank" rel="noreferrer">
         <img
@@ -73,14 +128,14 @@ function AnimeCard({ anime = {}, onSimilarClick = () => {} }) {
         </h3>
       </a>
 
-      {/* RATING */}
+      {/* COMMUNITY RATING */}
       <p style={{ fontSize: "12px", opacity: 0.8 }}>
         ⭐ {anime.rating ?? anime.score ?? "N/A"}
       </p>
 
-      {/* EPISODES */}
+      {/* FIX: EPISODES — shows "? eps" when count isn't available */}
       <p style={{ fontSize: "12px", opacity: 0.8 }}>
-        📺 {anime.episodes ?? "Unknown"} eps
+        📺 {episodeDisplay}
       </p>
 
       {/* SAVE BUTTON */}
@@ -99,6 +154,44 @@ function AnimeCard({ anime = {}, onSimilarClick = () => {} }) {
       >
         ⭐ Save to Profile
       </button>
+
+      {savedMsg && (
+        <p style={{ fontSize: "11px", color: "#4CAF50", margin: "4px 0 0" }}>
+          {savedMsg}
+        </p>
+      )}
+
+      {/* FIX: WATCHED CHECKBOX — now actually saves to the database */}
+      <label style={{ fontSize: "12px", marginTop: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+        <input
+          type="checkbox"
+          checked={watched}
+          onChange={handleWatched}
+        />
+        Watched
+      </label>
+
+      {/* FIX: RATING INPUT — now actually saves to the database */}
+      <input
+        type="number"
+        min="1"
+        max="10"
+        placeholder="Your rating (1-10)"
+        value={rating}
+        onChange={handleRating}
+        style={{
+          marginTop: "6px",
+          padding: "4px",
+          width: "100%",
+          boxSizing: "border-box"
+        }}
+      />
+
+      {ratingMsg && (
+        <p style={{ fontSize: "11px", color: "#4CAF50", margin: "4px 0 0" }}>
+          {ratingMsg}
+        </p>
+      )}
 
       {/* FIND SIMILAR BUTTON */}
       <button

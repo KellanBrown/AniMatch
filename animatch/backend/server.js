@@ -78,7 +78,7 @@ app.get("/dashboard/:username", (req, res) => {
   );
 });
 
-// ---------------- ⭐ FIXED: SAVED ANIME FETCH (MISSING ROUTE) ----------------
+// ---------------- SAVED ANIME FETCH ----------------
 app.get("/saved-anime/:username", (req, res) => {
   const { username } = req.params;
 
@@ -113,7 +113,7 @@ app.get("/search", async (req, res) => {
       title: anime.title_english || anime.title,
       image: anime.images?.jpg?.image_url || "",
       rating: anime.score || "N/A",
-      episodes: anime.episodes,
+      episodes: anime.episodes || null,
       url: anime.url
     }));
 
@@ -150,7 +150,6 @@ app.post("/recommend", async (req, res) => {
 
   try {
     let results = [];
-
     let finalGenres = [...genres];
 
     if (mood && moodBoost[mood]) {
@@ -192,10 +191,8 @@ app.post("/recommend", async (req, res) => {
 
     const scored = filtered.map(anime => {
       let score = anime.score || 0;
-
       if (anime.score >= 8) score += 2;
       if (anime.members > 50000 && anime.members < 2000000) score += 1;
-
       return { anime, score };
     });
 
@@ -207,7 +204,8 @@ app.post("/recommend", async (req, res) => {
       image: anime.images?.jpg?.image_url || "",
       rating: anime.score || "N/A",
       url: anime.url,
-      episodes: anime.episodes
+      // FIX: pass episodes through properly (was sometimes getting dropped)
+      episodes: anime.episodes || null
     }));
 
     res.json(finalResults);
@@ -239,6 +237,60 @@ app.post("/save-anime", (req, res) => {
       }
 
       res.json({ message: "Anime saved successfully!" });
+    }
+  );
+});
+
+// FIX: WATCH STATUS ROUTE (was completely missing from server)
+app.post("/watch-status", (req, res) => {
+  const { username, animeId, watched } = req.body;
+
+  if (!username || animeId === undefined) {
+    return res.status(400).json({ message: "Missing data." });
+  }
+
+  // INSERT or UPDATE if the row already exists for this user+anime
+  db.run(
+    `INSERT INTO watch_status (username, animeId, watched)
+     VALUES (?, ?, ?)
+     ON CONFLICT(username, animeId) DO UPDATE SET watched = excluded.watched`,
+    [username, animeId, watched ? 1 : 0],
+    function (err) {
+      if (err) {
+        console.error("Watch status error:", err.message);
+        return res.status(500).json({ message: "Failed to update watch status." });
+      }
+
+      res.json({ message: "Watch status updated!" });
+    }
+  );
+});
+
+// FIX: RATE ANIME ROUTE (was completely missing from server)
+app.post("/rate-anime", (req, res) => {
+  const { username, animeId, rating } = req.body;
+
+  if (!username || animeId === undefined || rating === undefined) {
+    return res.status(400).json({ message: "Missing data." });
+  }
+
+  if (rating < 1 || rating > 10) {
+    return res.status(400).json({ message: "Rating must be between 1 and 10." });
+  }
+
+  // INSERT or UPDATE if the row already exists for this user+anime
+  db.run(
+    `INSERT INTO ratings (username, animeId, rating)
+     VALUES (?, ?, ?)
+     ON CONFLICT(username, animeId) DO UPDATE SET rating = excluded.rating`,
+    [username, animeId, rating],
+    function (err) {
+      if (err) {
+        console.error("Rating error:", err.message);
+        return res.status(500).json({ message: "Failed to save rating." });
+      }
+
+      res.json({ message: "Rating saved!" });
     }
   );
 });
