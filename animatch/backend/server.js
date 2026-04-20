@@ -16,9 +16,8 @@ const fetchJikan = async (url, params = {}, retries = 3) => {
       const res = await axios.get(url, { params });
       return res.data;
     } catch (err) {
-      if (err.response?.status === 429 && i < retries - 1) {
-        await delay(1200 * (i + 1));
-      } else throw err;
+      if (err.response?.status === 429 && i < retries - 1) await delay(1200 * (i + 1));
+      else throw err;
     }
   }
 };
@@ -41,8 +40,8 @@ const formatAnime = (anime) => ({
   rating:   anime.score || "N/A",
   url:      anime.url,
   episodes: anime.episodes || null,
-  type:     anime.type || null,
-  genres:   (anime.genres || []).map(g => g.name)
+  type:     anime.type     || null,
+  genres:   (anime.genres  || []).map(g => g.name)
 });
 
 // ---- ROOT ----
@@ -101,7 +100,7 @@ app.get("/saved-anime/:username", (req, res) => {
 // ---- ANIME STATUS (single card) ----
 app.get("/anime-status/:username/:animeId", (req, res) => {
   const { username, animeId } = req.params;
-  db.get(`SELECT status FROM watch_status WHERE username = ? AND animeId = ?`, [username, animeId], (err, watchRow) => {
+  db.get(`SELECT status, updatedAt FROM watch_status WHERE username = ? AND animeId = ?`, [username, animeId], (err, watchRow) => {
     if (err) return res.status(500).json({ message: "Database error." });
     db.get(`SELECT rating FROM ratings WHERE username = ? AND animeId = ?`, [username, animeId], (err2, ratingRow) => {
       if (err2) return res.status(500).json({ message: "Database error." });
@@ -109,22 +108,31 @@ app.get("/anime-status/:username/:animeId", (req, res) => {
         if (err3) return res.status(500).json({ message: "Database error." });
         res.json({
           status:    watchRow  ? (watchRow.status || "none") : "none",
-          rating:    ratingRow ? ratingRow.rating             : null,
-          currentEp: epRow     ? epRow.currentEp              : 0
+          updatedAt: watchRow  ? watchRow.updatedAt           : null,
+          rating:    ratingRow ? ratingRow.rating              : null,
+          currentEp: epRow     ? epRow.currentEp               : 0
         });
       });
     });
   });
 });
 
-// ---- ALL STATUS (watchlist page) ----
+// ---- ALL STATUS (watchlist) — now includes episodes + type from saved_anime ----
 app.get("/all-status/:username", (req, res) => {
   const { username } = req.params;
   db.all(
-    `SELECT sa.animeId,
-       COALESCE(ws.status, 'none')  AS status,
+    `SELECT
+       sa.animeId,
+       sa.title,
+       sa.image,
+       sa.url,
+       sa.genres,
+       sa.episodes,
+       sa.type,
+       COALESCE(ws.status, 'none')   AS status,
+       ws.updatedAt,
        r.rating,
-       COALESCE(ep.currentEp, 0)    AS currentEp
+       COALESCE(ep.currentEp, 0)     AS currentEp
      FROM saved_anime sa
      LEFT JOIN watch_status     ws ON ws.username = sa.username AND ws.animeId = sa.animeId
      LEFT JOIN ratings          r  ON r.username  = sa.username AND r.animeId  = sa.animeId
@@ -138,14 +146,13 @@ app.get("/all-status/:username", (req, res) => {
   );
 });
 
-// ---- USER STATS (top genre fixed) ----
+// ---- USER STATS ----
 app.get("/user-stats/:username", (req, res) => {
   const { username } = req.params;
-
   db.get(
     `SELECT COUNT(sa.id) AS totalSaved,
-       SUM(CASE WHEN ws.status = 'completed' THEN 1 ELSE 0 END) AS totalCompleted,
-       SUM(CASE WHEN ws.status = 'watching'  THEN 1 ELSE 0 END) AS totalWatching,
+       SUM(CASE WHEN ws.status IN ('completed','rewatching') THEN 1 ELSE 0 END) AS totalCompleted,
+       SUM(CASE WHEN ws.status IN ('watching','rewatching')  THEN 1 ELSE 0 END) AS totalWatching,
        ROUND(AVG(r.rating), 1) AS avgRating
      FROM saved_anime sa
      LEFT JOIN watch_status ws ON ws.username = sa.username AND ws.animeId = sa.animeId
@@ -154,8 +161,6 @@ app.get("/user-stats/:username", (req, res) => {
     [username],
     (err, row) => {
       if (err) return res.status(500).json({ message: "Database error." });
-
-      // Top genre: expand the comma-separated genres column and count
       db.all(
         `SELECT genres FROM saved_anime WHERE username = ? AND genres != '' AND genres IS NOT NULL`,
         [username],
@@ -167,17 +172,16 @@ app.get("/user-stats/:username", (req, res) => {
               try {
                 const gs = JSON.parse(r.genres);
                 gs.forEach(g => { counts[g] = (counts[g] || 0) + 1; });
-              } catch (e) { /* skip malformed */ }
+              } catch (e) {}
             });
             const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
             topGenre = sorted[0]?.[0] || null;
           }
-
           res.json({
-            totalSaved:      row.totalSaved      || 0,
-            totalCompleted:  row.totalCompleted   || 0,
-            totalWatching:   row.totalWatching    || 0,
-            avgRating:       row.avgRating        || null,
+            totalSaved:     row.totalSaved     || 0,
+            totalCompleted: row.totalCompleted || 0,
+            totalWatching:  row.totalWatching  || 0,
+            avgRating:      row.avgRating      || null,
             topGenre
           });
         }
@@ -187,9 +191,27 @@ app.get("/user-stats/:username", (req, res) => {
 });
 
 // ---- REMOVE ANIME ----
+// mode: 'full' (default) = delete everything
+// mode: 'status' = only reset watch status (for re-watching use case)
 app.delete("/remove-anime", (req, res) => {
-  const { username, animeId } = req.body;
+  const { username, animeId, mode = "full" } = req.body;
   if (!username || !animeId) return res.status(400).json({ message: "Missing data." });
+
+  if (mode === "status") {
+    // Just reset status — keep the anime in saved list
+    db.run(
+      `INSERT INTO watch_status (username, animeId, status, updatedAt) VALUES (?, ?, 'none', datetime('now'))
+       ON CONFLICT(username, animeId) DO UPDATE SET status = 'none', updatedAt = datetime('now')`,
+      [username, animeId],
+      function (err) {
+        if (err) return res.status(500).json({ message: "Failed to reset status." });
+        res.json({ message: "Status reset." });
+      }
+    );
+    return;
+  }
+
+  // Full removal
   db.run(`DELETE FROM saved_anime      WHERE username = ? AND animeId = ?`, [username, animeId]);
   db.run(`DELETE FROM watch_status     WHERE username = ? AND animeId = ?`, [username, animeId]);
   db.run(`DELETE FROM ratings          WHERE username = ? AND animeId = ?`, [username, animeId]);
@@ -207,40 +229,29 @@ app.get("/search", async (req, res) => {
     const query = req.query.q;
     if (!query) return res.status(400).json({ error: "Search query required" });
     await delay(300);
-    const data    = await fetchJikan("https://api.jikan.moe/v4/anime", { q: query, limit: 12 });
-    const results = data.data.map(formatAnime);
-    res.json(results);
+    const data = await fetchJikan("https://api.jikan.moe/v4/anime", { q: query, limit: 12 });
+    res.json(data.data.map(formatAnime));
   } catch (error) {
     console.error("Search error:", error.message);
     res.status(500).json({ error: "Search failed" });
   }
 });
 
-// ---- RECOMMENDATIONS (with episode type filter) ----
+// ---- RECOMMENDATIONS ----
 app.post("/recommend", async (req, res) => {
   const { genres = [], maxEpisodes, hiddenGem, mood, seedAnimeId, seedAnimeTitle } = req.body;
-
   const genreMap = { Action:1, Adventure:2, Comedy:4, Drama:8, Fantasy:10, Romance:22, Horror:14, SciFi:24 };
   const moodBoost = {
-    Excited:     ["Action","Adventure"],
-    Chill:       ["Comedy","Fantasy"],
-    Adventurous: ["Action","Fantasy","Adventure"],
-    Romantic:    ["Romance","Drama"],
-    Sad:         ["Drama","Romance"],
-    Comedic:     ["Comedy"]
+    Excited:["Action","Adventure"], Chill:["Comedy","Fantasy"],
+    Adventurous:["Action","Fantasy","Adventure"], Romantic:["Romance","Drama"],
+    Sad:["Drama","Romance"], Comedic:["Comedy"]
   };
   const moodKeywords = {
-    Excited:     ["epic battle","tournament","shounen"],
-    Chill:       ["slice of life","iyashikei","healing"],
-    Adventurous: ["adventure quest","journey","isekai"],
-    Romantic:    ["love story","romance","shoujo"],
-    Sad:         ["tragedy","emotional","tearjerker"],
-    Comedic:     ["comedy","gag","parody"]
+    Excited:["epic battle","tournament","shounen"], Chill:["slice of life","iyashikei","healing"],
+    Adventurous:["adventure quest","journey","isekai"], Romantic:["love story","romance","shoujo"],
+    Sad:["tragedy","emotional","tearjerker"], Comedic:["comedy","gag","parody"]
   };
-
-  // EPISODE FIX: only include these Jikan types in results
-  // This excludes Movies (1 ep), Music, CM, PV, Special
-  const ALLOWED_TYPES = ["TV", "ONA", "OVA"];
+  const ALLOWED_TYPES = ["TV","ONA","OVA"];
 
   try {
     let pool = [];
@@ -248,42 +259,31 @@ app.post("/recommend", async (req, res) => {
     if (mood && moodBoost[mood]) finalGenres = [...new Set([...finalGenres, ...moodBoost[mood]])];
     if (finalGenres.length === 0) finalGenres = ["Action"];
 
-    // Strategy 1: Genre fetches with random page offsets
     for (const g of finalGenres) {
       const genreId = genreMap[g];
       if (!genreId) continue;
-      const page1 = Math.floor(Math.random() * 3) + 1;
-      const page2 = Math.floor(Math.random() * 3) + 4;
+      const p1 = Math.floor(Math.random() * 3) + 1;
+      const p2 = Math.floor(Math.random() * 3) + 4;
       try {
-        const d1 = await fetchJikan("https://api.jikan.moe/v4/anime", {
-          genres: genreId, limit: 20, order_by: "score", sort: "desc",
-          page: page1, type: "tv"   // <-- TV only for genre fetches
-        });
+        const d1 = await fetchJikan("https://api.jikan.moe/v4/anime", { genres: genreId, limit: 20, order_by: "score", sort: "desc", page: p1, type: "tv" });
         pool.push(...(d1.data || []));
         await delay(500);
-        const d2 = await fetchJikan("https://api.jikan.moe/v4/anime", {
-          genres: genreId, limit: 20, order_by: "popularity", sort: "asc",
-          page: page2, type: "tv"
-        });
+        const d2 = await fetchJikan("https://api.jikan.moe/v4/anime", { genres: genreId, limit: 20, order_by: "popularity", sort: "asc", page: p2, type: "tv" });
         pool.push(...(d2.data || []));
         await delay(500);
-      } catch (e) { console.warn(`Genre ${g} fetch failed:`, e.message); }
+      } catch (e) { console.warn(`Genre ${g}:`, e.message); }
     }
 
-    // Strategy 2: Mood keyword searches
     if (mood && moodKeywords[mood]) {
       for (const kw of shuffle(moodKeywords[mood]).slice(0, 2)) {
         try {
-          const d = await fetchJikan("https://api.jikan.moe/v4/anime", {
-            q: kw, limit: 15, order_by: "score", sort: "desc", type: "tv"
-          });
+          const d = await fetchJikan("https://api.jikan.moe/v4/anime", { q: kw, limit: 15, order_by: "score", sort: "desc", type: "tv" });
           pool.push(...(d.data || []));
           await delay(500);
-        } catch (e) { console.warn(`Keyword "${kw}" failed:`, e.message); }
+        } catch (e) {}
       }
     }
 
-    // Strategy 3: Seed anime recommendations
     if (seedAnimeId) {
       try {
         const d = await fetchJikan(`https://api.jikan.moe/v4/anime/${seedAnimeId}/recommendations`);
@@ -292,71 +292,49 @@ app.post("/recommend", async (req, res) => {
             const detail = await fetchJikan(`https://api.jikan.moe/v4/anime/${entry.entry.mal_id}`);
             if (detail.data) pool.push(detail.data);
             await delay(400);
-          } catch (e) { /* skip */ }
+          } catch (e) {}
         }
-      } catch (e) { console.warn("Seed recs failed:", e.message); }
+      } catch (e) {}
     }
 
     if (seedAnimeTitle && !seedAnimeId) {
       try {
         const d = await fetchJikan("https://api.jikan.moe/v4/anime", { q: seedAnimeTitle, limit: 1 });
-        if (d.data && d.data[0]) {
+        if (d.data?.[0]) {
           const recs = await fetchJikan(`https://api.jikan.moe/v4/anime/${d.data[0].mal_id}/recommendations`);
           for (const entry of (recs.data || []).slice(0, 6)) {
             try {
               const detail = await fetchJikan(`https://api.jikan.moe/v4/anime/${entry.entry.mal_id}`);
               if (detail.data) pool.push(detail.data);
               await delay(400);
-            } catch (e) { /* skip */ }
+            } catch (e) {}
           }
         }
-      } catch (e) { console.warn("Seed title search failed:", e.message); }
+      } catch (e) {}
     }
 
-    // Strategy 4: Current season
     try {
       const seasonal = await fetchJikan("https://api.jikan.moe/v4/seasons/now", { limit: 20 });
       pool.push(...(seasonal.data || []));
-    } catch (e) { console.warn("Seasonal fetch failed:", e.message); }
+    } catch (e) {}
 
-    // ---- FILTER ----
     let filtered = dedupe(pool);
-
-    // EPISODE FIX: strictly exclude movies, specials, music, etc.
-    filtered = filtered.filter(a => {
-      const t = (a.type || "").toUpperCase();
-      return ALLOWED_TYPES.includes(t) || !a.type; // keep unknowns rather than hiding everything
-    });
-
-    // Score filter
+    filtered = filtered.filter(a => ALLOWED_TYPES.includes((a.type || "").toUpperCase()) || !a.type);
     filtered = filtered.filter(a => a.score && a.score >= 6.5);
+    if (maxEpisodes) filtered = filtered.filter(a => !a.episodes || a.episodes <= maxEpisodes);
+    if (hiddenGem) filtered = filtered.filter(a => a.score >= 7.2 && (a.members || 0) < 400000);
 
-    // Episode count filter — only apply when user actually asked for a length preference
-    // and only to anime where we KNOW the episode count (don't penalise ongoing shows)
-    if (maxEpisodes) {
-      filtered = filtered.filter(a => {
-        if (!a.episodes) return true; // ongoing/unknown — keep
-        return a.episodes <= maxEpisodes;
-      });
-    }
-
-    if (hiddenGem) {
-      filtered = filtered.filter(a => a.score >= 7.2 && (a.members || 0) < 400000);
-    }
-
-    // ---- SCORE & SHUFFLE ----
     const scored = filtered.map(anime => {
       let score = anime.score || 0;
       if (anime.score >= 8.5) score += 2;
       else if (anime.score >= 8.0) score += 1;
-      score += Math.random() * 1.5; // randomness = variety every quiz
+      score += Math.random() * 1.5;
       return { anime, score };
     });
 
     scored.sort((a, b) => b.score - a.score);
     const candidates = scored.slice(0, 40);
     const final = [...shuffle(candidates.slice(0, 20)), ...candidates.slice(20)];
-
     res.json(final.slice(0, 15).map(({ anime }) => formatAnime(anime)));
 
   } catch (error) {
@@ -379,15 +357,12 @@ app.get("/personalized-recs/:username", async (req, res) => {
     });
 
     if (saved.length === 0) return res.json([]);
-
     const savedIds = new Set(saved.map(s => s.animeId));
     let seeds = saved.filter(s => s.rating && s.rating >= 7);
     if (seeds.length === 0) seeds = saved;
 
-    const seedSample = shuffle(seeds).slice(0, 4);
     let pool = [];
-
-    for (const seed of seedSample) {
+    for (const seed of shuffle(seeds).slice(0, 4)) {
       try {
         const data = await fetchJikan(`https://api.jikan.moe/v4/anime/${seed.animeId}/recommendations`);
         for (const entry of (data.data || []).slice(0, 5)) {
@@ -396,41 +371,37 @@ app.get("/personalized-recs/:username", async (req, res) => {
             const detail = await fetchJikan(`https://api.jikan.moe/v4/anime/${entry.entry.mal_id}`);
             if (detail.data) pool.push({ ...detail.data, _seedTitle: seed.title });
             await delay(350);
-          } catch (e) { /* skip */ }
+          } catch (e) {}
         }
         await delay(500);
-      } catch (e) { console.warn(`Personalized seed ${seed.animeId} failed:`, e.message); }
+      } catch (e) {}
     }
 
-    let filtered = dedupe(pool)
-      .filter(a => !savedIds.has(a.mal_id) && a.score >= 6.5);
-
-    filtered = shuffle(filtered);
-
-    res.json(filtered.slice(0, 12).map(anime => ({
+    let filtered = dedupe(pool).filter(a => !savedIds.has(a.mal_id) && a.score >= 6.5);
+    res.json(shuffle(filtered).slice(0, 12).map(anime => ({
       ...formatAnime(anime),
       seedTitle: anime._seedTitle || null
     })));
-
   } catch (error) {
     console.error("Personalized recs error:", error.message);
     res.status(500).json([]);
   }
 });
 
-// ---- SAVE ANIME (now stores genres) ----
+// ---- SAVE ANIME (now stores episodes + type) ----
 app.post("/save-anime", (req, res) => {
   const { username, anime } = req.body;
   if (!username || !anime) return res.status(400).json({ message: "Missing data." });
-  const { id, title, image, url, genres = [] } = anime;
+  const { id, title, image, url, genres = [], episodes = null, type = null } = anime;
   const genresJson = JSON.stringify(genres);
 
   db.get(`SELECT id FROM saved_anime WHERE username = ? AND animeId = ?`, [username, id], (err, existing) => {
     if (err)      return res.status(500).json({ message: "Database error." });
     if (existing) return res.status(409).json({ message: "Already saved." });
     db.run(
-      `INSERT INTO saved_anime (username, animeId, title, image, url, genres) VALUES (?, ?, ?, ?, ?, ?)`,
-      [username, id, title, image, url, genresJson],
+      `INSERT INTO saved_anime (username, animeId, title, image, url, genres, episodes, type)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [username, id, title, image, url, genresJson, episodes, type],
       function (err2) {
         if (err2) return res.status(500).json({ message: "Failed to save anime." });
         res.json({ message: "Anime saved successfully!" });
@@ -439,17 +410,16 @@ app.post("/save-anime", (req, res) => {
   });
 });
 
-// ---- WATCH STATUS (3-state: none / watching / completed) ----
+// ---- WATCH STATUS (tracks updatedAt for "last watched" display) ----
 app.post("/watch-status", (req, res) => {
   const { username, animeId, status } = req.body;
-  // status must be 'none', 'watching', or 'completed'
-  const validStatuses = ["none", "watching", "completed"];
+  const valid = ["none","watching","completed","rewatching"];
   if (!username || animeId === undefined) return res.status(400).json({ message: "Missing data." });
-  if (!validStatuses.includes(status))    return res.status(400).json({ message: "Invalid status." });
+  if (!valid.includes(status)) return res.status(400).json({ message: "Invalid status." });
 
   db.run(
-    `INSERT INTO watch_status (username, animeId, status) VALUES (?, ?, ?)
-     ON CONFLICT(username, animeId) DO UPDATE SET status = excluded.status`,
+    `INSERT INTO watch_status (username, animeId, status, updatedAt) VALUES (?, ?, ?, datetime('now'))
+     ON CONFLICT(username, animeId) DO UPDATE SET status = excluded.status, updatedAt = datetime('now')`,
     [username, animeId, status],
     function (err) {
       if (err) return res.status(500).json({ message: "Failed to update watch status." });
@@ -458,16 +428,14 @@ app.post("/watch-status", (req, res) => {
   );
 });
 
-// ---- RATE ANIME (supports 0.5 increments) ----
+// ---- RATE ANIME ----
 app.post("/rate-anime", (req, res) => {
   const { username, animeId, rating } = req.body;
   if (!username || animeId === undefined || rating === undefined)
     return res.status(400).json({ message: "Missing data." });
   const r = parseFloat(rating);
   if (isNaN(r) || r < 0.5 || r > 10) return res.status(400).json({ message: "Rating must be 0.5–10." });
-  // Round to nearest 0.5
   const rounded = Math.round(r * 2) / 2;
-
   db.run(
     `INSERT INTO ratings (username, animeId, rating) VALUES (?, ?, ?)
      ON CONFLICT(username, animeId) DO UPDATE SET rating = excluded.rating`,

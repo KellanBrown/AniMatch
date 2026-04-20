@@ -15,9 +15,9 @@ db.run(`CREATE TABLE IF NOT EXISTS users (
   age          INTEGER,
   gender       TEXT,
   passwordHash TEXT
-)`, err => { if (err) console.error("users table error:", err.message); });
+)`, err => { if (err) console.error("users:", err.message); });
 
-// SAVED ANIME — genres column added for top-genre stat
+// SAVED ANIME — now stores episodes + type so cards always have full data
 db.run(`CREATE TABLE IF NOT EXISTS saved_anime (
   id       INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT,
@@ -25,44 +25,50 @@ db.run(`CREATE TABLE IF NOT EXISTS saved_anime (
   title    TEXT,
   image    TEXT,
   url      TEXT,
-  genres   TEXT DEFAULT ''
-)`, err => { if (err) console.error("saved_anime table error:", err.message); });
+  genres   TEXT DEFAULT '[]',
+  episodes INTEGER DEFAULT NULL,
+  type     TEXT DEFAULT NULL
+)`, err => { if (err) console.error("saved_anime:", err.message); });
 
-// Migrate: add genres column if it doesn't exist yet (safe no-op if already there)
-db.run(`ALTER TABLE saved_anime ADD COLUMN genres TEXT DEFAULT ''`,
-  () => {}); // intentionally ignore error — means column already exists
+// Safe migrations — no-op if columns already exist
+db.run(`ALTER TABLE saved_anime ADD COLUMN genres   TEXT    DEFAULT '[]'`, () => {});
+db.run(`ALTER TABLE saved_anime ADD COLUMN episodes INTEGER DEFAULT NULL`,  () => {});
+db.run(`ALTER TABLE saved_anime ADD COLUMN type     TEXT    DEFAULT NULL`,  () => {});
 
-// WATCH STATUS — status is 'none' | 'watching' | 'completed'
+// WATCH STATUS — status: 'none' | 'watching' | 'completed' | 'rewatching'
+// updatedAt lets us show "picked up X days ago"
 db.run(`CREATE TABLE IF NOT EXISTS watch_status (
-  id       INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT,
-  animeId  INTEGER,
-  status   TEXT DEFAULT 'none',
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  username  TEXT,
+  animeId   INTEGER,
+  status    TEXT DEFAULT 'none',
+  updatedAt TEXT DEFAULT (datetime('now')),
   UNIQUE(username, animeId)
-)`, err => { if (err) console.error("watch_status table error:", err.message); });
+)`, err => { if (err) console.error("watch_status:", err.message); });
 
-// Migrate: if old table has a 'watched' integer column, rename to status text
-// We do this by checking if the new 'status' column exists
+db.run(`ALTER TABLE watch_status ADD COLUMN status    TEXT DEFAULT 'none'`,           () => {});
+db.run(`ALTER TABLE watch_status ADD COLUMN updatedAt TEXT DEFAULT (datetime('now'))`, () => {});
+
+// Migrate old boolean 'watched' column if it exists
 db.all(`PRAGMA table_info(watch_status)`, (err, cols) => {
-  if (err) return;
+  if (err || !cols) return;
   const hasStatus  = cols.some(c => c.name === "status");
   const hasWatched = cols.some(c => c.name === "watched");
   if (!hasStatus && hasWatched) {
-    // Migrate old boolean watched -> status string
     db.run(`ALTER TABLE watch_status ADD COLUMN status TEXT DEFAULT 'none'`, () => {
       db.run(`UPDATE watch_status SET status = CASE WHEN watched = 1 THEN 'completed' ELSE 'none' END`);
     });
   }
 });
 
-// RATINGS — supports decimals (0.5 steps)
+// RATINGS — REAL for 0.5 steps
 db.run(`CREATE TABLE IF NOT EXISTS ratings (
   id       INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT,
   animeId  INTEGER,
   rating   REAL,
   UNIQUE(username, animeId)
-)`, err => { if (err) console.error("ratings table error:", err.message); });
+)`, err => { if (err) console.error("ratings:", err.message); });
 
 // EPISODE PROGRESS
 db.run(`CREATE TABLE IF NOT EXISTS episode_progress (
@@ -71,6 +77,6 @@ db.run(`CREATE TABLE IF NOT EXISTS episode_progress (
   animeId   INTEGER,
   currentEp INTEGER DEFAULT 0,
   UNIQUE(username, animeId)
-)`, err => { if (err) console.error("episode_progress table error:", err.message); });
+)`, err => { if (err) console.error("episode_progress:", err.message); });
 
 module.exports = db;
