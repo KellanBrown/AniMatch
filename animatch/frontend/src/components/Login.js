@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { useToast } from "./Toast";
 
+const API = "https://animatch-ofks.onrender.com";
+
 function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -9,49 +11,78 @@ function Login() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+
+    if (loading) return; // prevent spam clicks
     setLoading(true);
 
     try {
-      const res  = await fetch("https://animatch-ofks.onrender.com/login", {
+      const res = await fetch(`${API}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password })
       });
-      const data = await res.json();
 
-      if (!res.ok) {
-        toast(data.message || "Login failed", "error");
-        setLoading(false);
-        return;
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {
+        // if server sends no JSON, avoid crash
       }
 
+      if (!res.ok) {
+        throw new Error(data.message || "Login failed");
+      }
+
+      // ✅ SUCCESS
       localStorage.setItem("username", username);
       toast(`Welcome back, ${username}!`, "success");
-      setTimeout(() => { window.location.hash = "/dashboard"; }, 800);
+
+      // redirect immediately
+      window.location.hash = "/dashboard";
 
     } catch (err) {
-      console.error(err);
-      toast("Server error. Please try again.", "error");
+      console.error("LOGIN ERROR:", err);
+      toast(err.message || "Server error. Please try again.", "error");
+    } finally {
+      // ✅ ALWAYS reset loading (success or fail)
       setLoading(false);
     }
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px" }}>
+    <div style={{
+      minHeight: "100vh",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "24px"
+    }}>
 
       {/* Logo */}
       <div className="am-logo" style={{ fontSize: "2.8rem", marginBottom: "8px" }}>
         <span className="ani">Ani</span><span className="match">Match</span>
       </div>
-      <p style={{ color: "var(--text-muted)", fontSize: "14px", marginBottom: "36px", textAlign: "center" }}>
+
+      <p style={{
+        color: "var(--text-muted)",
+        fontSize: "14px",
+        marginBottom: "36px",
+        textAlign: "center"
+      }}>
         Your personal anime universe
       </p>
 
       <div className="am-auth-card" style={{ width: "100%", maxWidth: "400px" }}>
         <h2 style={{ marginBottom: "4px" }}>Welcome back</h2>
-        <p style={{ fontSize: "13px", marginBottom: "24px" }}>Sign in to your account</p>
+        <p style={{ fontSize: "13px", marginBottom: "24px" }}>
+          Sign in to your account
+        </p>
 
-        <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+        <form
+          onSubmit={handleLogin}
+          style={{ display: "flex", flexDirection: "column", gap: "14px" }}
+        >
           <div className="am-field">
             <label>Username</label>
             <input
@@ -99,13 +130,25 @@ function Login() {
       </div>
 
       {/* Decorative tags */}
-      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center", marginTop: "32px" }}>
+      <div style={{
+        display: "flex",
+        gap: "8px",
+        flexWrap: "wrap",
+        justifyContent: "center",
+        marginTop: "32px"
+      }}>
         {["Action", "Fantasy", "Romance", "Horror", "SciFi", "Comedy", "Drama"].map(g => (
           <span key={g} style={{
-            padding: "4px 12px", borderRadius: "20px",
-            background: "var(--surface)", border: "1px solid var(--border)",
-            fontSize: "12px", color: "var(--text-dim)", fontWeight: 700
-          }}>{g}</span>
+            padding: "4px 12px",
+            borderRadius: "20px",
+            background: "var(--bg-elevated)",
+            border: "1px solid var(--border)",
+            fontSize: "12px",
+            color: "var(--text-muted)",
+            fontWeight: 700
+          }}>
+            {g}
+          </span>
         ))}
       </div>
 

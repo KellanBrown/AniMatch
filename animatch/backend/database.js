@@ -15,43 +15,62 @@ db.run(`CREATE TABLE IF NOT EXISTS users (
   age          INTEGER,
   gender       TEXT,
   passwordHash TEXT
-)`, err => { if (err) console.error("Error creating users table", err.message); });
+)`, err => { if (err) console.error("users table error:", err.message); });
 
-// SAVED ANIME
+// SAVED ANIME — genres column added for top-genre stat
 db.run(`CREATE TABLE IF NOT EXISTS saved_anime (
   id       INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT,
   animeId  INTEGER,
   title    TEXT,
   image    TEXT,
-  url      TEXT
-)`, err => { if (err) console.error("Error creating saved_anime table", err.message); });
+  url      TEXT,
+  genres   TEXT DEFAULT ''
+)`, err => { if (err) console.error("saved_anime table error:", err.message); });
 
-// WATCH STATUS
+// Migrate: add genres column if it doesn't exist yet (safe no-op if already there)
+db.run(`ALTER TABLE saved_anime ADD COLUMN genres TEXT DEFAULT ''`,
+  () => {}); // intentionally ignore error — means column already exists
+
+// WATCH STATUS — status is 'none' | 'watching' | 'completed'
 db.run(`CREATE TABLE IF NOT EXISTS watch_status (
   id       INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT,
   animeId  INTEGER,
-  watched  INTEGER DEFAULT 0,
+  status   TEXT DEFAULT 'none',
   UNIQUE(username, animeId)
-)`, err => { if (err) console.error("Error creating watch_status table", err.message); });
+)`, err => { if (err) console.error("watch_status table error:", err.message); });
 
-// RATINGS
+// Migrate: if old table has a 'watched' integer column, rename to status text
+// We do this by checking if the new 'status' column exists
+db.all(`PRAGMA table_info(watch_status)`, (err, cols) => {
+  if (err) return;
+  const hasStatus  = cols.some(c => c.name === "status");
+  const hasWatched = cols.some(c => c.name === "watched");
+  if (!hasStatus && hasWatched) {
+    // Migrate old boolean watched -> status string
+    db.run(`ALTER TABLE watch_status ADD COLUMN status TEXT DEFAULT 'none'`, () => {
+      db.run(`UPDATE watch_status SET status = CASE WHEN watched = 1 THEN 'completed' ELSE 'none' END`);
+    });
+  }
+});
+
+// RATINGS — supports decimals (0.5 steps)
 db.run(`CREATE TABLE IF NOT EXISTS ratings (
   id       INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT,
   animeId  INTEGER,
-  rating   INTEGER,
+  rating   REAL,
   UNIQUE(username, animeId)
-)`, err => { if (err) console.error("Error creating ratings table", err.message); });
+)`, err => { if (err) console.error("ratings table error:", err.message); });
 
-// EPISODE PROGRESS (NEW)
+// EPISODE PROGRESS
 db.run(`CREATE TABLE IF NOT EXISTS episode_progress (
   id        INTEGER PRIMARY KEY AUTOINCREMENT,
   username  TEXT,
   animeId   INTEGER,
   currentEp INTEGER DEFAULT 0,
   UNIQUE(username, animeId)
-)`, err => { if (err) console.error("Error creating episode_progress table", err.message); });
+)`, err => { if (err) console.error("episode_progress table error:", err.message); });
 
 module.exports = db;

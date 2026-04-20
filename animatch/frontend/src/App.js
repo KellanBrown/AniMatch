@@ -6,20 +6,23 @@ import Search from "./Search";
 import Quiz from "./components/Quiz";
 import Recommendations from "./components/Recommendations";
 import Watchlist from "./Watchlist";
+import { ToastProvider } from "./components/Toast";
 
 function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/search" element={<Search />} />
-        <Route path="/quiz" element={<Quiz />} />
-        <Route path="/recommendations" element={<Recommendations />} />
-        <Route path="/watchlist" element={<Watchlist />} />
-      </Routes>
-    </Router>
+    <ToastProvider>
+      <Router>
+        <Routes>
+          <Route path="/"               element={<Login />} />
+          <Route path="/signup"         element={<Signup />} />
+          <Route path="/dashboard"      element={<Dashboard />} />
+          <Route path="/search"         element={<Search />} />
+          <Route path="/quiz"           element={<Quiz />} />
+          <Route path="/recommendations" element={<Recommendations />} />
+          <Route path="/watchlist"      element={<Watchlist />} />
+        </Routes>
+      </Router>
+    </ToastProvider>
   );
 }
 

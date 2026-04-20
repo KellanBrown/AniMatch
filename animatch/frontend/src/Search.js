@@ -5,24 +5,22 @@ import AnimeCard from "./components/AnimeCard";
 const API = "https://animatch-ofks.onrender.com";
 
 function Search() {
-  const [query, setQuery]           = useState("");
-  const [results, setResults]       = useState([]);
+  const [query, setQuery]             = useState("");
+  const [results, setResults]         = useState([]);
   const [suggestions, setSuggestions] = useState([]);
-  const [searching, setSearching]   = useState(false);
-  const [searched, setSearched]     = useState(false);
+  const [searching, setSearching]     = useState(false);
+  const [searched, setSearched]       = useState(false);
 
   const navigate    = useNavigate();
   const debounceRef = useRef(null);
   const inputRef    = useRef(null);
 
-  // ---- Autocomplete suggestions ----
+  // ---- Autocomplete ----
   const handleInput = (e) => {
     const value = e.target.value;
     setQuery(value);
     clearTimeout(debounceRef.current);
-
     if (value.length < 2) { setSuggestions([]); return; }
-
     debounceRef.current = setTimeout(async () => {
       try {
         const res  = await fetch(`${API}/search?q=${encodeURIComponent(value)}`);
@@ -38,14 +36,20 @@ function Search() {
     inputRef.current?.focus();
   };
 
-  // ---- Main search ----
+  // ---- Clear button ----
+  const handleClear = () => {
+    setQuery("");
+    setSuggestions([]);
+    inputRef.current?.focus();
+  };
+
+  // ---- Search ----
   const handleSearch = async (e) => {
     e.preventDefault();
     if (!query.trim()) return;
     setSuggestions([]);
     setSearching(true);
     setSearched(true);
-
     try {
       const res  = await fetch(`${API}/search?q=${encodeURIComponent(query)}`);
       const data = await res.json();
@@ -58,25 +62,19 @@ function Search() {
     }
   };
 
-  // ---- Find similar — uses Jikan recommendations endpoint (fixed) ----
+  // ---- Find Similar (Jikan recs endpoint) ----
   const handleSimilarClick = async (animeId) => {
     setSearching(true);
     setSearched(true);
     setSuggestions([]);
-
     try {
       const res  = await fetch(`https://api.jikan.moe/v4/anime/${animeId}/recommendations`);
       const data = await res.json();
-
       const similar = (data.data || []).slice(0, 12).map(item => ({
-        id:       item.entry.mal_id,
-        title:    item.entry.title,
-        image:    item.entry.images?.jpg?.image_url || "",
-        rating:   "N/A",
-        url:      item.entry.url,
-        episodes: null
+        id: item.entry.mal_id, title: item.entry.title,
+        image: item.entry.images?.jpg?.image_url || "",
+        rating: "N/A", url: item.entry.url, episodes: null
       }));
-
       setResults(similar);
       setQuery("Similar anime");
     } catch (err) {
@@ -97,14 +95,13 @@ function Search() {
         <button className="am-btn am-btn-teal am-btn-sm"   onClick={() => navigate("/watchlist")}>📋 Watchlist</button>
       </nav>
 
-      {/* Header */}
       <div style={{ marginBottom: "24px" }}>
         <h1>Search <span style={{ color: "var(--purple)" }}>Anime</span></h1>
         <p style={{ marginTop: "4px", fontSize: "13px" }}>Find any anime by title — or hit "Find Similar" on a card</p>
       </div>
 
       {/* Search form */}
-      <form onSubmit={handleSearch} style={{ position: "relative", marginBottom: "8px" }}>
+      <form onSubmit={handleSearch} style={{ marginBottom: "8px" }}>
         <div style={{ display: "flex", gap: "10px" }}>
           <div style={{ position: "relative", flex: 1 }}>
             <input
@@ -113,34 +110,43 @@ function Search() {
               onChange={handleInput}
               placeholder="Search by title..."
               className="am-input"
-              style={{ paddingLeft: "16px", fontSize: "14px", height: "44px" }}
+              style={{ paddingLeft: "16px", paddingRight: query ? "36px" : "12px", fontSize: "14px", height: "44px" }}
               autoComplete="off"
             />
+
+            {/* ✕ clear button inside input */}
+            {query && (
+              <button
+                type="button"
+                onClick={handleClear}
+                style={{
+                  position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)",
+                  background: "none", border: "none", cursor: "pointer",
+                  color: "var(--text-muted)", fontSize: "16px", lineHeight: 1,
+                  padding: "4px", borderRadius: "50%",
+                  transition: "color 0.15s"
+                }}
+                onMouseEnter={e => e.currentTarget.style.color = "var(--text)"}
+                onMouseLeave={e => e.currentTarget.style.color = "var(--text-muted)"}
+                title="Clear search"
+              >✕</button>
+            )}
 
             {/* Autocomplete dropdown */}
             {suggestions.length > 0 && (
               <div style={{
                 position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
-                background: "var(--surface2)",
-                border: "1px solid var(--border-hover)",
-                borderRadius: "var(--radius-md)",
-                overflow: "hidden",
-                zIndex: 100
+                background: "var(--surface2)", border: "1px solid var(--border-hover)",
+                borderRadius: "var(--radius-md)", overflow: "hidden", zIndex: 100
               }}>
                 {suggestions.map(a => (
                   <div
                     key={a.id}
                     onClick={() => pickSuggestion(a.title)}
                     style={{
-                      padding: "10px 16px",
-                      cursor: "pointer",
-                      fontSize: "13px",
-                      color: "var(--text)",
-                      borderBottom: "1px solid var(--border)",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "10px",
-                      transition: "background 0.1s"
+                      padding: "10px 16px", cursor: "pointer", fontSize: "13px",
+                      color: "var(--text)", borderBottom: "1px solid var(--border)",
+                      display: "flex", alignItems: "center", gap: "10px", transition: "background 0.1s"
                     }}
                     onMouseEnter={e => e.currentTarget.style.background = "var(--surface3)"}
                     onMouseLeave={e => e.currentTarget.style.background = "transparent"}
@@ -149,7 +155,7 @@ function Search() {
                       <img src={a.image} alt="" style={{ width: "28px", height: "40px", objectFit: "cover", borderRadius: "4px" }} />
                     )}
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: "13px" }}>{a.title}</div>
+                      <div style={{ fontWeight: 700 }}>{a.title}</div>
                       {a.rating && a.rating !== "N/A" && (
                         <div style={{ fontSize: "11px", color: "var(--yellow)" }}>★ {a.rating}</div>
                       )}
@@ -160,34 +166,26 @@ function Search() {
             )}
           </div>
 
-          <button
-            type="submit"
-            className="am-btn am-btn-coral"
-            style={{ height: "44px", padding: "0 24px", fontSize: "14px" }}
-          >
+          <button type="submit" className="am-btn am-btn-coral" style={{ height: "44px", padding: "0 24px", fontSize: "14px" }}>
             Search
           </button>
         </div>
       </form>
 
-      {/* Status / results count */}
+      {/* Results count */}
       {searched && !searching && (
         <p style={{ fontSize: "12px", color: "var(--text-dim)", marginBottom: "20px", fontWeight: 700 }}>
-          {results.length > 0
-            ? `${results.length} results for "${query}"`
-            : `No results for "${query}"`}
+          {results.length > 0 ? `${results.length} results for "${query}"` : `No results for "${query}"`}
         </p>
       )}
 
-      {/* Loading skeleton */}
+      {/* Skeleton loaders */}
       {searching && (
         <div className="am-grid" style={{ marginTop: "8px" }}>
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} style={{
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: "var(--radius-lg)",
-              overflow: "hidden",
+              background: "var(--surface)", border: "1px solid var(--border)",
+              borderRadius: "var(--radius-lg)", overflow: "hidden",
               animation: "pulse 1.4s ease-in-out infinite"
             }}>
               <div style={{ height: "260px", background: "var(--surface2)" }} />
@@ -197,7 +195,7 @@ function Search() {
               </div>
             </div>
           ))}
-          <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }`}</style>
+          <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}`}</style>
         </div>
       )}
 
@@ -219,7 +217,7 @@ function Search() {
         </div>
       )}
 
-      {/* Results grid */}
+      {/* Results grid — Find Similar visible here since these aren't saved cards */}
       {!searching && results.length > 0 && (
         <div className="am-grid">
           {results.map(anime => (
@@ -227,6 +225,7 @@ function Search() {
               key={anime.id}
               anime={anime}
               onSimilarClick={handleSimilarClick}
+              hideSimilar={false}
             />
           ))}
         </div>

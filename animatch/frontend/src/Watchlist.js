@@ -30,8 +30,8 @@ function Watchlist() {
       const merged = (Array.isArray(saved) ? saved : []).map(anime => ({
         ...anime,
         id:         anime.animeId,
-        watched:    statusMap[anime.animeId]?.watched || 0,
-        userRating: statusMap[anime.animeId]?.rating  || null,
+        status:     statusMap[anime.animeId]?.status    || "none",
+        userRating: statusMap[anime.animeId]?.rating    || null,
         currentEp:  statusMap[anime.animeId]?.currentEp || 0
       }));
 
@@ -55,12 +55,17 @@ function Watchlist() {
     } catch (err) { console.error(err); }
   };
 
-  const watchedCount   = savedAnime.filter(a => a.watched).length;
-  const unwatchedCount = savedAnime.filter(a => !a.watched).length;
+  const counts = {
+    all:       savedAnime.length,
+    watching:  savedAnime.filter(a => a.status === "watching").length,
+    completed: savedAnime.filter(a => a.status === "completed").length,
+    none:      savedAnime.filter(a => a.status === "none").length
+  };
 
   const filtered = savedAnime.filter(anime => {
-    if (filter === "watched")   return anime.watched;
-    if (filter === "unwatched") return !anime.watched;
+    if (filter === "watching")  return anime.status === "watching";
+    if (filter === "completed") return anime.status === "completed";
+    if (filter === "none")      return anime.status === "none";
     return true;
   });
 
@@ -69,25 +74,28 @@ function Watchlist() {
   return (
     <div className="am-page">
 
-      {/* Nav */}
+      {/* Nav — Profile not Dashboard */}
       <nav className="am-nav">
         <div className="am-logo"><span className="ani">Ani</span><span className="match">Match</span></div>
-        <button className="am-btn am-btn-ghost am-btn-sm" onClick={() => (window.location.hash = "/dashboard")}>⬅ Dashboard</button>
-        <button className="am-btn am-btn-coral am-btn-sm" onClick={() => (window.location.hash = "/quiz")}>📝 Quiz</button>
+        <button className="am-btn am-btn-ghost am-btn-sm"  onClick={() => (window.location.hash = "/dashboard")}>⬅ Profile</button>
+        <button className="am-btn am-btn-coral am-btn-sm"  onClick={() => (window.location.hash = "/quiz")}>📝 Quiz</button>
         <button className="am-btn am-btn-purple am-btn-sm" onClick={() => (window.location.hash = "/search")}>🔍 Search</button>
       </nav>
 
       <div style={{ marginBottom: "20px" }}>
         <h1>My <span style={{ color: "var(--teal)" }}>Watchlist</span></h1>
-        <p style={{ marginTop: "4px", fontSize: "13px" }}>{savedAnime.length} saved · {watchedCount} watched · {unwatchedCount} to watch</p>
+        <p style={{ marginTop: "4px", fontSize: "13px" }}>
+          {counts.all} saved · {counts.watching} watching · {counts.completed} completed · {counts.none} not started
+        </p>
       </div>
 
-      {/* Filter tabs */}
-      <div className="am-tabs" style={{ marginBottom: "24px" }}>
+      {/* Filter tabs — all 4 states */}
+      <div className="am-tabs" style={{ marginBottom: "24px", flexWrap: "wrap" }}>
         {[
-          { key: "all",       label: `All (${savedAnime.length})` },
-          { key: "watched",   label: `Watched (${watchedCount})` },
-          { key: "unwatched", label: `To Watch (${unwatchedCount})` }
+          { key: "all",       label: `All (${counts.all})` },
+          { key: "watching",  label: `Watching (${counts.watching})` },
+          { key: "completed", label: `Completed (${counts.completed})` },
+          { key: "none",      label: `Not Started (${counts.none})` }
         ].map(t => (
           <button
             key={t.key}
@@ -101,14 +109,24 @@ function Watchlist() {
 
       {filtered.length === 0 ? (
         <div className="am-empty">
-          <h3>{filter === "all" ? "Nothing saved yet" : `No ${filter} anime`}</h3>
-          <p>{filter === "all" ? "Save anime from the quiz or search to build your list!" : "Try switching the filter above."}</p>
+          <h3>
+            {filter === "all"       ? "Nothing saved yet" :
+             filter === "watching"  ? "Nothing in progress" :
+             filter === "completed" ? "Nothing completed yet" :
+                                      "Nothing waiting to start"}
+          </h3>
+          <p>
+            {filter === "all"
+              ? "Save anime from the quiz or search to build your list!"
+              : "Update an anime card's status to see it here."}
+          </p>
         </div>
       ) : (
         <div className="am-grid">
           {filtered.map(anime => (
             <div key={anime.animeId} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <AnimeCard anime={anime} />
+              {/* hideSimilar=true hides the Find Similar button on profile cards */}
+              <AnimeCard anime={anime} hideSimilar={true} />
               {anime.userRating && (
                 <p style={{ fontSize: "11px", color: "var(--text-dim)", fontWeight: 700, textAlign: "center" }}>
                   Your rating: <span style={{ color: "var(--yellow)" }}>{anime.userRating}/10</span>
