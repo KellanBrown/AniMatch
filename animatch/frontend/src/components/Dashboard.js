@@ -10,6 +10,7 @@ function Dashboard() {
   const [personalizedRecs, setPersonalizedRecs] = useState([]);
   const [loadingRecs, setLoadingRecs]           = useState(false);
   const [loadingAnime, setLoadingAnime]         = useState(true);
+  const [pendingCount, setPendingCount]         = useState(0);
 
   useEffect(() => {
     const username = localStorage.getItem("username");
@@ -31,11 +32,19 @@ function Dashboard() {
       try {
         const statsRes = await fetch(`${API}/user-stats/${username}`);
         if (statsRes.ok) setStats(await statsRes.json());
-      } catch (err) { console.error(err); }
+      } catch (err) {}
+
+      // Check for pending friend requests for notification badge
+      try {
+        const friendRes = await fetch(`${API}/friends/${username}`);
+        if (friendRes.ok) {
+          const friends = await friendRes.json();
+          setPendingCount(friends.filter(f => f.status === "pending" && f.direction === "received").length);
+        }
+      } catch (err) {}
 
       setLoadingAnime(false);
 
-      // Personalized recs load after main content
       setLoadingRecs(true);
       try {
         const recsRes = await fetch(`${API}/personalized-recs/${username}`);
@@ -43,7 +52,7 @@ function Dashboard() {
           const recsData = await recsRes.json();
           setPersonalizedRecs(Array.isArray(recsData) ? recsData : []);
         }
-      } catch (err) { console.error(err); }
+      } catch (err) {}
       setLoadingRecs(false);
     };
 
@@ -55,22 +64,35 @@ function Dashboard() {
   return (
     <div className="am-page">
 
-      {/* Nav */}
       <nav className="am-nav">
         <div className="am-logo"><span className="ani">Ani</span><span className="match">Match</span></div>
         <button className="am-btn am-btn-teal am-btn-sm"   onClick={() => (window.location.hash = "/watchlist")}>📋 Watchlist</button>
         <button className="am-btn am-btn-purple am-btn-sm" onClick={() => (window.location.hash = "/search")}>🔍 Search</button>
         <button className="am-btn am-btn-coral am-btn-sm"  onClick={() => (window.location.hash = "/quiz")}>📝 Quiz</button>
-        <button className="am-btn am-btn-ghost am-btn-sm"  onClick={() => { localStorage.removeItem("username"); window.location.hash = "/"; }}>Logout</button>
+        <button
+          className="am-btn am-btn-ghost am-btn-sm"
+          onClick={() => (window.location.hash = "/friends")}
+          style={{ position: "relative" }}
+        >
+          👥 Friends
+          {pendingCount > 0 && (
+            <span style={{
+              position: "absolute", top: "-4px", right: "-4px",
+              background: "var(--coral)", color: "#fff",
+              fontSize: "9px", fontWeight: 800,
+              width: "16px", height: "16px", borderRadius: "50%",
+              display: "flex", alignItems: "center", justifyContent: "center"
+            }}>{pendingCount}</span>
+          )}
+        </button>
+        <button className="am-btn am-btn-ghost am-btn-sm" onClick={() => { localStorage.removeItem("username"); window.location.hash = "/"; }}>Logout</button>
       </nav>
 
-      {/* Welcome */}
       <div style={{ marginBottom: "24px" }}>
         <h1>Welcome back, <span style={{ color: "var(--coral)" }}>{user.username}</span>!</h1>
         <p style={{ marginTop: "4px", fontSize: "13px" }}>{user.email} · Age {user.age} · {user.gender}</p>
       </div>
 
-      {/* Stats */}
       {stats && (
         <div className="am-stats">
           <div className="am-stat am-stat--coral">
@@ -113,11 +135,7 @@ function Dashboard() {
           {loadingRecs ? (
             <div className="am-grid">
               {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} style={{
-                  background: "var(--surface)", border: "1px solid var(--border)",
-                  borderRadius: "var(--radius-lg)", overflow: "hidden",
-                  animation: "pulse 1.4s ease-in-out infinite", animationDelay: `${i * 0.1}s`
-                }}>
+                <div key={i} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden", animation: "pulse 1.4s ease-in-out infinite", animationDelay: `${i * 0.1}s` }}>
                   <div style={{ height: "260px", background: "var(--surface2)" }} />
                   <div style={{ padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
                     <div style={{ height: "13px", background: "var(--surface3)", borderRadius: "4px", width: "80%" }} />
@@ -142,15 +160,11 @@ function Dashboard() {
                 });
                 return Object.entries(groups).map(([seedTitle, animes]) => (
                   <div key={seedTitle} style={{ marginBottom: "28px" }}>
-                    <p style={{
-                      fontSize: "12px", fontWeight: 800, letterSpacing: "0.07em",
-                      textTransform: "uppercase", color: "var(--text-dim)", marginBottom: "12px"
-                    }}>
+                    <p style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-dim)", marginBottom: "12px" }}>
                       Because you liked <span style={{ color: "var(--purple)" }}>"{seedTitle}"</span>
                     </p>
                     <div className="am-grid">
                       {animes.map(anime => (
-                        // hideSimilar=false here — these are NEW suggestions so Find Similar makes sense
                         <AnimeCard key={anime.id} anime={anime} hideSimilar={false} />
                       ))}
                     </div>
@@ -167,9 +181,7 @@ function Dashboard() {
         <div className="am-section-header">
           <h2>Recently Saved</h2>
           {savedAnime.length > 6 && (
-            <button className="am-btn am-btn-ghost am-btn-sm" onClick={() => (window.location.hash = "/watchlist")}>
-              View all →
-            </button>
+            <button className="am-btn am-btn-ghost am-btn-sm" onClick={() => (window.location.hash = "/watchlist")}>View all →</button>
           )}
         </div>
 
@@ -187,12 +199,7 @@ function Dashboard() {
         ) : (
           <div className="am-grid">
             {savedAnime.slice(0, 6).map(anime => (
-              // hideSimilar=true on saved cards — they're already in profile
-              <AnimeCard
-                key={anime.animeId || anime.id}
-                anime={{ ...anime, id: anime.animeId }}
-                hideSimilar={true}
-              />
+              <AnimeCard key={anime.animeId || anime.id} anime={{ ...anime, id: anime.animeId }} hideSimilar={true} />
             ))}
           </div>
         )}
