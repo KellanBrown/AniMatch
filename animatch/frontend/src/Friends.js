@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useToast } from "./Toast";
+import { useToast } from "./components/Toast";
 
 const API = "https://animatch-ofks.onrender.com";
 
