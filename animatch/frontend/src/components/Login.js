@@ -4,17 +4,17 @@ import { useToast } from "./Toast";
 const API = "https://animatch-ofks.onrender.com";
 
 function Login() {
-  const [view, setView]         = useState("login"); // "login" | "forgot" | "reset"
+  // Controls which panel is visible: the login form, forgot password, or reset password
+  const [view, setView]         = useState("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [email, setEmail]       = useState("");
-  const [resetToken, setResetToken] = useState("");
+  const [resetToken, setResetToken]   = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [tokenDisplay, setTokenDisplay] = useState(null);
+  const [tokenDisplay, setTokenDisplay] = useState(null); // holds the token response to show on screen
   const [loading, setLoading]   = useState(false);
   const toast = useToast();
 
-  // ---- Login ----
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -27,6 +27,7 @@ function Login() {
       if (!res.ok) { toast(data.message || "Login failed", "error"); setLoading(false); return; }
       localStorage.setItem("username", username);
       toast(`Welcome back, ${username}!`, "success");
+      // Small delay so the success toast is visible before navigating
       setTimeout(() => { window.location.hash = "/dashboard"; }, 800);
     } catch (err) {
       toast("Server error. Please try again.", "error");
@@ -34,7 +35,6 @@ function Login() {
     }
   };
 
-  // ---- Forgot password ----
   const handleForgot = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -45,7 +45,7 @@ function Login() {
       });
       const data = await res.json();
       if (res.ok && data.resetToken) {
-        // Show the token on screen (in production this would be emailed)
+        // In production this token would be emailed. For now we show it directly.
         setTokenDisplay(data);
         toast("Reset token generated!", "success");
       } else {
@@ -57,7 +57,6 @@ function Login() {
     setLoading(false);
   };
 
-  // ---- Reset password ----
   const handleReset = async (e) => {
     e.preventDefault();
     if (newPassword.length < 6) { toast("Password must be at least 6 characters.", "error"); return; }
@@ -70,6 +69,7 @@ function Login() {
       const data = await res.json();
       if (res.ok) {
         toast("Password reset! You can now log in.", "success");
+        // Clear everything and send the user back to the login form
         setView("login");
         setResetToken("");
         setNewPassword("");
@@ -95,7 +95,6 @@ function Login() {
 
       <div className="am-auth-card" style={{ width: "100%", maxWidth: "400px" }}>
 
-        {/* ---- LOGIN ---- */}
         {view === "login" && (
           <>
             <h2 style={{ marginBottom: "4px" }}>Welcome back</h2>
@@ -124,7 +123,7 @@ function Login() {
           </>
         )}
 
-        {/* ---- FORGOT PASSWORD ---- */}
+        {/* Step 1 of password reset — collect the email */}
         {view === "forgot" && !tokenDisplay && (
           <>
             <h2 style={{ marginBottom: "4px" }}>Reset Password</h2>
@@ -146,13 +145,14 @@ function Login() {
           </>
         )}
 
-        {/* ---- TOKEN DISPLAY (would be emailed in production) ---- */}
+        {/* Step 2 — display the token so the user can copy it (would be emailed in production) */}
         {view === "forgot" && tokenDisplay && (
           <>
             <h2 style={{ marginBottom: "8px", color: "var(--teal)" }}>Token Generated!</h2>
             <p style={{ fontSize: "12px", marginBottom: "12px" }}>
               Copy this token and use it below to set your new password. In a future update this will be sent to your email automatically.
             </p>
+            {/* userSelect: all makes it easy to triple-click and copy the whole token */}
             <div style={{
               background: "var(--surface3)", border: "1px solid var(--border-hover)",
               borderRadius: "var(--radius-sm)", padding: "10px 14px",
@@ -164,13 +164,14 @@ function Login() {
             <p style={{ fontSize: "11px", color: "var(--text-dim)", marginBottom: "16px" }}>
               For: <strong style={{ color: "var(--text)" }}>{tokenDisplay.username}</strong> · Valid for 1 hour
             </p>
+            {/* Pre-fill the token field on the next screen so the user doesn't have to paste it manually */}
             <button className="am-btn am-btn-coral am-btn-full" onClick={() => { setResetToken(tokenDisplay.resetToken); setView("reset"); }}>
               Continue to Reset →
             </button>
           </>
         )}
 
-        {/* ---- RESET PASSWORD ---- */}
+        {/* Step 3 — enter the token and the new password */}
         {view === "reset" && (
           <>
             <h2 style={{ marginBottom: "4px" }}>New Password</h2>
@@ -197,6 +198,7 @@ function Login() {
         )}
       </div>
 
+      {/* Decorative genre tags along the bottom — purely visual */}
       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center", marginTop: "32px" }}>
         {["Action", "Fantasy", "Romance", "Horror", "SciFi", "Comedy", "Drama"].map(g => (
           <span key={g} style={{ padding: "4px 12px", borderRadius: "20px", background: "var(--surface)", border: "1px solid var(--border)", fontSize: "12px", color: "var(--text-dim)", fontWeight: 700 }}>{g}</span>

@@ -10,13 +10,14 @@ function Dashboard() {
   const [personalizedRecs, setPersonalizedRecs] = useState([]);
   const [loadingRecs, setLoadingRecs]           = useState(false);
   const [loadingAnime, setLoadingAnime]         = useState(true);
-  const [pendingCount, setPendingCount]         = useState(0);
+  const [pendingCount, setPendingCount]         = useState(0); // incoming friend requests for the badge
 
   useEffect(() => {
     const username = localStorage.getItem("username");
     if (!username) { window.location.hash = "/"; return; }
 
     const fetchData = async () => {
+      // Each section fetches independently so a failure in one doesn't block the others
       try {
         const userRes  = await fetch(`${API}/dashboard/${username}`);
         const userData = await userRes.json();
@@ -34,17 +35,19 @@ function Dashboard() {
         if (statsRes.ok) setStats(await statsRes.json());
       } catch (err) {}
 
-      // Check for pending friend requests for notification badge
       try {
         const friendRes = await fetch(`${API}/friends/${username}`);
         if (friendRes.ok) {
           const friends = await friendRes.json();
+          // Count only requests the current user received, not ones they sent
           setPendingCount(friends.filter(f => f.status === "pending" && f.direction === "received").length);
         }
       } catch (err) {}
 
       setLoadingAnime(false);
 
+      // Personalized recs are fetched last because they're the slowest — they hit
+      // multiple external API calls on the backend. We show the rest of the page first.
       setLoadingRecs(true);
       try {
         const recsRes = await fetch(`${API}/personalized-recs/${username}`);
@@ -75,6 +78,7 @@ function Dashboard() {
           style={{ position: "relative" }}
         >
           👥 Friends
+          {/* Notification bubble — only rendered when there are pending requests */}
           {pendingCount > 0 && (
             <span style={{
               position: "absolute", top: "-4px", right: "-4px",
@@ -111,6 +115,7 @@ function Dashboard() {
             <div className="am-stat__val">{stats.avgRating ?? "—"}</div>
             <div className="am-stat__lbl">Avg Rating</div>
           </div>
+          {/* Top genre box uses inline styles because the font size shrinks for longer genre names */}
           <div className="am-stat" style={{ borderColor: "rgba(255,107,74,0.2)" }}>
             <div className="am-stat__val" style={{ fontSize: stats.topGenre ? "15px" : "22px", paddingTop: stats.topGenre ? "6px" : 0, color: "var(--coral)" }}>
               {stats.topGenre ?? "—"}
@@ -120,7 +125,7 @@ function Dashboard() {
         </div>
       )}
 
-      {/* Because you liked X */}
+      {/* Personalized recommendations — only shown once the user has saved something */}
       {savedAnime.length > 0 && (
         <div style={{ marginTop: "36px" }}>
           <div className="am-section-header">
@@ -133,6 +138,7 @@ function Dashboard() {
           </div>
 
           {loadingRecs ? (
+            // Skeleton cards while recs are still loading
             <div className="am-grid">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden", animation: "pulse 1.4s ease-in-out infinite", animationDelay: `${i * 0.1}s` }}>
@@ -152,6 +158,8 @@ function Dashboard() {
           ) : (
             <>
               {(() => {
+                // Group recs by which saved anime they were recommended from,
+                // capping each group at 4 cards so it doesn't get unwieldy
                 const groups = {};
                 personalizedRecs.forEach(anime => {
                   const key = anime.seedTitle || "Your taste";
@@ -176,7 +184,7 @@ function Dashboard() {
         </div>
       )}
 
-      {/* Recently Saved */}
+      {/* Recently saved — capped at 6 with a link to the full watchlist */}
       <div style={{ marginTop: "36px" }}>
         <div className="am-section-header">
           <h2>Recently Saved</h2>
@@ -198,6 +206,7 @@ function Dashboard() {
           </div>
         ) : (
           <div className="am-grid">
+            {/* animeId comes from the DB; id is what AnimeCard expects, so we remap it here */}
             {savedAnime.slice(0, 6).map(anime => (
               <AnimeCard key={anime.animeId || anime.id} anime={{ ...anime, id: anime.animeId }} hideSimilar={true} />
             ))}

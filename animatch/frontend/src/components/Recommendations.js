@@ -10,14 +10,17 @@ function Recommendations() {
   const navigate = useNavigate();
   const { answers } = location.state || {};
 
+  // Stack of result sets. New results (from genre toggles or "Find Similar") get
+  // pushed on top so the user can see both the original and the new results.
   const [recommendationStack, setRecommendationStack] = useState([]);
-  const [loading, setLoading]         = useState(true);
-  const [refetching, setRefetching]   = useState(false);
-  const [quizGenres, setQuizGenres]   = useState([]);
-  const [activeGenres, setActiveGenres] = useState([]);
-  const [quizParams, setQuizParams]   = useState({});
-  const [seedLabel, setSeedLabel]     = useState(null); // for display
+  const [loading, setLoading]           = useState(true);
+  const [refetching, setRefetching]     = useState(false); // true only during genre filter refetches
+  const [quizGenres, setQuizGenres]     = useState([]);    // genres from the quiz answers, used to restore on reset
+  const [activeGenres, setActiveGenres] = useState([]);    // currently selected genres
+  const [quizParams, setQuizParams]     = useState({});
+  const [seedLabel, setSeedLabel]       = useState(null);  // display name for the seed anime, if any
 
+  // Parse the quiz answers into recommendation params on first render
   useEffect(() => {
     if (!answers) return;
 
@@ -32,21 +35,21 @@ function Recommendations() {
       if (answer.includes("Long"))   maxEpisodes = 100;
       if (answer === "Hidden Gems")  hiddenGem = true;
 
-      // Parse seed anime answers from quiz Q5
+      // Q5 answers are encoded as special strings — parse them back out here
       if (answer.startsWith("__seed__")) {
-        // Format: __seed__{id}__{title}
+        // Format: __seed__{mal_id}__{title}
         const parts = answer.replace("__seed__", "").split("__");
-        seedAnimeId   = parseInt(parts[0], 10);
+        seedAnimeId    = parseInt(parts[0], 10);
         seedAnimeTitle = parts[1] || null;
         setSeedLabel(parts[1] || null);
       } else if (answer.startsWith("__seedtitle__")) {
         seedAnimeTitle = answer.replace("__seedtitle__", "");
         setSeedLabel(seedAnimeTitle);
       }
-      // __noseed__ = user skipped Q5, just ignore it
+      // __noseed__ means the user skipped Q5 — nothing to do
     });
 
-    if (genres.length === 0) genres = ["Action"];
+    if (genres.length === 0) genres = ["Action"]; // default so we always have something to query
     const params = { mood, genres, maxEpisodes, hiddenGem, seedAnimeId, seedAnimeTitle };
     setQuizParams(params);
     setQuizGenres(genres);
@@ -68,6 +71,7 @@ function Recommendations() {
       if (isInitial) {
         setRecommendationStack([{ title, data: results }]);
       } else {
+        // Replace only the top of the stack so "Find Similar" results underneath are preserved
         setRecommendationStack(prev => [{ title, data: results }, ...prev.slice(1)]);
       }
     } catch (err) {
@@ -78,6 +82,8 @@ function Recommendations() {
     }
   };
 
+  // Toggles a genre on or off and immediately refetches with the new selection.
+  // Selecting zero genres is a no-op so the list never goes blank.
   const handleGenreToggle = (genre) => {
     const newGenres = activeGenres.includes(genre)
       ? activeGenres.filter(g => g !== genre)
@@ -87,11 +93,14 @@ function Recommendations() {
     fetchRecs({ ...quizParams, genres: newGenres }, `Results — ${newGenres.join(", ")}`, false);
   };
 
+  // Restores genres to whatever the quiz originally produced
   const handleReset = () => {
     setActiveGenres(quizGenres);
     fetchRecs(quizParams, "Your Recommendations", false);
   };
 
+  // Fetches MAL's recommendations for a specific anime and appends them as a
+  // new section below the current results
   const handleSimilarClick = async (animeId) => {
     try {
       const res  = await fetch(`https://api.jikan.moe/v4/anime/${animeId}/recommendations`);
@@ -105,6 +114,8 @@ function Recommendations() {
     } catch (err) { console.error("Similar fetch failed:", err); }
   };
 
+  // True when the active genres differ from the original quiz genres,
+  // which controls whether the reset button is shown
   const isModified = JSON.stringify([...activeGenres].sort()) !== JSON.stringify([...quizGenres].sort());
 
   if (!answers) return <div className="am-loading">Please take the quiz first.</div>;
@@ -117,7 +128,6 @@ function Recommendations() {
         <div style={{ fontSize: "13px", fontWeight: 700, color: "var(--text-muted)", marginBottom: "24px", letterSpacing: "0.05em" }}>
           {seedLabel ? `Finding anime based on your love of "${seedLabel}"...` : "Finding your perfect anime..."}
         </div>
-        {/* Loading skeletons */}
         <div className="am-grid">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} style={{
@@ -155,7 +165,6 @@ function Recommendations() {
         </p>
       )}
 
-      {/* Genre filter */}
       <div style={{ margin: "16px 0 24px" }}>
         <p style={{ fontSize: "12px", fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-dim)", marginBottom: "10px" }}>
           Filter by genre
@@ -168,12 +177,14 @@ function Recommendations() {
               <button
                 key={genre}
                 onClick={() => handleGenreToggle(genre)}
+                // Coral = came from the quiz, teal = added manually by the user
                 className={`am-pill ${isActive ? (isQuizGenre ? "active-coral" : "active-teal") : ""}`}
               >
                 {genre}
               </button>
             );
           })}
+          {/* Reset button only appears when genres have been modified from their quiz defaults */}
           {isModified && (
             <button className="am-pill" onClick={handleReset} style={{ borderStyle: "dashed" }}>
               ↩ Reset
@@ -183,7 +194,6 @@ function Recommendations() {
         {refetching && <p style={{ fontSize: "12px", color: "var(--text-dim)", marginTop: "10px" }}>Updating...</p>}
       </div>
 
-      {/* Results */}
       {recommendationStack.map((section, index) => (
         <div key={index} style={{ marginBottom: "40px" }}>
           <div className="am-section-header">

@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 
 const API = "https://animatch-ofks.onrender.com";
 
+// The five quiz questions in order. "choice" questions render as buttons;
+// "text" questions render a search input with autocomplete.
 const questions = [
   {
     question: "What's your current mood?",
@@ -33,24 +35,25 @@ const questions = [
 ];
 
 function Quiz() {
-  const [current, setCurrent]       = useState(0);
-  const [answers, setAnswers]       = useState([]);
-  const [textInput, setTextInput]   = useState("");
+  const [current, setCurrent]         = useState(0);
+  const [answers, setAnswers]         = useState([]);
+  const [textInput, setTextInput]     = useState("");
   const [suggestions, setSuggestions] = useState([]);
-  const [searching, setSearching]   = useState(false);
-  const debounceRef = useRef(null);
+  const [searching, setSearching]     = useState(false);
+  const debounceRef = useRef(null); // debounce timer for the anime search input
   const navigate    = useNavigate();
 
   const q = questions[current];
 
-  // ---- Handle choice answer ----
+  // Records the answer and immediately advances to the next question
   const handleChoice = (answer) => {
     const newAnswers = [...answers, answer];
     setAnswers(newAnswers);
     setCurrent(current + 1);
   };
 
-  // ---- Handle text input (seed anime search) ----
+  // Fires on every keystroke in the seed anime input. Waits 300ms before
+  // searching so we're not hitting the API on every character.
   const handleTextInput = (e) => {
     const value = e.target.value;
     setTextInput(value);
@@ -69,12 +72,15 @@ function Quiz() {
     }, 300);
   };
 
+  // When the user picks from the dropdown, encode the anime's ID and title into
+  // a special answer string the recommendations page knows how to parse
   const pickSuggestion = (anime) => {
     setSuggestions([]);
-    // Store as a special seed answer with the anime's MAL ID so we can use recommendations endpoint
     finishQuiz([...answers, `__seed__${anime.id}__${anime.title}`]);
   };
 
+  // Q5 is optional — skipping it sends a sentinel value so the recs page knows
+  // not to expect a seed anime
   const handleSkip = () => {
     finishQuiz([...answers, "__noseed__"]);
   };
@@ -82,7 +88,8 @@ function Quiz() {
   const handleTextSubmit = (e) => {
     e.preventDefault();
     if (!textInput.trim()) { handleSkip(); return; }
-    // If they typed something but didn't pick a suggestion, search and use the first result
+    // If the user typed something but didn't pick a suggestion, use the top result.
+    // If there are no suggestions yet, send the raw title and let the backend search for it.
     if (suggestions.length > 0) {
       pickSuggestion(suggestions[0]);
     } else {
@@ -103,7 +110,7 @@ function Quiz() {
 
       <div className="am-quiz-wrap">
 
-        {/* Progress dots */}
+        {/* Progress dots — filled teal for completed, coral for current, grey for upcoming */}
         <div className="am-quiz-progress">
           {questions.map((_, i) => (
             <div key={i} className={`am-quiz-dot ${i < current ? "done" : i === current ? "current" : ""}`} />
@@ -116,7 +123,6 @@ function Quiz() {
 
         <div className="am-quiz-q">{q.question}</div>
 
-        {/* Choice question */}
         {q.type === "choice" && (
           <div className="am-quiz-options">
             {q.options.map((opt, idx) => (
@@ -127,7 +133,6 @@ function Quiz() {
           </div>
         )}
 
-        {/* Text/search question */}
         {q.type === "text" && (
           <form onSubmit={handleTextSubmit} style={{ width: "100%", marginTop: "8px" }}>
             <div style={{ position: "relative" }}>
@@ -140,7 +145,6 @@ function Quiz() {
                 style={{ fontSize: "14px", height: "48px", paddingLeft: "16px" }}
               />
 
-              {/* Autocomplete dropdown */}
               {suggestions.length > 0 && (
                 <div style={{
                   position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,

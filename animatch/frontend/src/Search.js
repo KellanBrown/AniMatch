@@ -7,15 +7,16 @@ const API = "https://animatch-ofks.onrender.com";
 function Search() {
   const [query, setQuery]             = useState("");
   const [results, setResults]         = useState([]);
-  const [suggestions, setSuggestions] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);  // autocomplete dropdown items
   const [searching, setSearching]     = useState(false);
-  const [searched, setSearched]       = useState(false);
+  const [searched, setSearched]       = useState(false); // tracks whether user has searched at least once
 
   const navigate    = useNavigate();
-  const debounceRef = useRef(null);
+  const debounceRef = useRef(null);  // holds the timeout ID so we can cancel it on each keystroke
   const inputRef    = useRef(null);
 
-  // ---- Autocomplete ----
+  // Fires on every keystroke. Waits 300ms after the user stops typing before
+  // hitting the API, so we're not spamming requests on every character.
   const handleInput = (e) => {
     const value = e.target.value;
     setQuery(value);
@@ -30,20 +31,19 @@ function Search() {
     }, 300);
   };
 
+  // When the user clicks a suggestion, fill the input and close the dropdown
   const pickSuggestion = (title) => {
     setQuery(title);
     setSuggestions([]);
     inputRef.current?.focus();
   };
 
-  // ---- Clear button ----
   const handleClear = () => {
     setQuery("");
     setSuggestions([]);
     inputRef.current?.focus();
   };
 
-  // ---- Search ----
   const handleSearch = async (e) => {
     e.preventDefault();
     if (!query.trim()) return;
@@ -62,7 +62,9 @@ function Search() {
     }
   };
 
-  // ---- Find Similar (Jikan recs endpoint) ----
+  // Fetches MAL's own recommendation list for a given anime. Used when the
+  // user clicks "Find Similar" on a card. We map the result to a minimal shape
+  // since recommendations don't return full anime objects.
   const handleSimilarClick = async (animeId) => {
     setSearching(true);
     setSearched(true);
@@ -87,7 +89,6 @@ function Search() {
   return (
     <div className="am-page">
 
-      {/* Nav */}
       <nav className="am-nav">
         <div className="am-logo"><span className="ani">Ani</span><span className="match">Match</span></div>
         <button className="am-btn am-btn-ghost am-btn-sm"  onClick={() => navigate("/dashboard")}>⬅ Profile</button>
@@ -100,7 +101,6 @@ function Search() {
         <p style={{ marginTop: "4px", fontSize: "13px" }}>Find any anime by title — or hit "Find Similar" on a card</p>
       </div>
 
-      {/* Search form */}
       <form onSubmit={handleSearch} style={{ marginBottom: "8px" }}>
         <div style={{ display: "flex", gap: "10px" }}>
           <div style={{ position: "relative", flex: 1 }}>
@@ -114,7 +114,7 @@ function Search() {
               autoComplete="off"
             />
 
-            {/* ✕ clear button inside input */}
+            {/* Clear button — only visible when there's something in the input */}
             {query && (
               <button
                 type="button"
@@ -132,7 +132,6 @@ function Search() {
               >✕</button>
             )}
 
-            {/* Autocomplete dropdown */}
             {suggestions.length > 0 && (
               <div style={{
                 position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
@@ -172,14 +171,13 @@ function Search() {
         </div>
       </form>
 
-      {/* Results count */}
       {searched && !searching && (
         <p style={{ fontSize: "12px", color: "var(--text-dim)", marginBottom: "20px", fontWeight: 700 }}>
           {results.length > 0 ? `${results.length} results for "${query}"` : `No results for "${query}"`}
         </p>
       )}
 
-      {/* Skeleton loaders */}
+      {/* Skeleton cards shown while the request is in flight */}
       {searching && (
         <div className="am-grid" style={{ marginTop: "8px" }}>
           {Array.from({ length: 6 }).map((_, i) => (
@@ -199,7 +197,7 @@ function Search() {
         </div>
       )}
 
-      {/* Empty state before first search */}
+      {/* Initial empty state before the user has done anything */}
       {!searched && !searching && (
         <div className="am-empty" style={{ marginTop: "60px" }}>
           <div style={{ fontSize: "48px", marginBottom: "12px" }}>🔍</div>
@@ -208,7 +206,6 @@ function Search() {
         </div>
       )}
 
-      {/* No results */}
       {searched && !searching && results.length === 0 && (
         <div className="am-empty" style={{ marginTop: "40px" }}>
           <div style={{ fontSize: "48px", marginBottom: "12px" }}>😔</div>
@@ -217,7 +214,6 @@ function Search() {
         </div>
       )}
 
-      {/* Results grid — Find Similar visible here since these aren't saved cards */}
       {!searching && results.length > 0 && (
         <div className="am-grid">
           {results.map(anime => (

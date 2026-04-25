@@ -9,8 +9,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Simple promise-based delay, used to avoid hammering the Jikan API
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Wraps Jikan API calls with basic retry logic. If we get rate-limited (429),
+// we wait a bit longer each attempt before trying again.
 const fetchJikan = async (url, params = {}, retries = 3) => {
   for (let i = 0; i < retries; i++) {
     try {
@@ -23,6 +26,7 @@ const fetchJikan = async (url, params = {}, retries = 3) => {
   }
 };
 
+// Fisher-Yates shuffle — produces a new shuffled array without mutating the original
 const shuffle = (arr) => {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -32,13 +36,15 @@ const shuffle = (arr) => {
   return a;
 };
 
+// Removes duplicate anime entries by mal_id, keeping the first occurrence
 const dedupe = (arr) => Array.from(new Map(arr.map(a => [a.mal_id, a])).values());
 
+// Strips down a raw Jikan anime object to just what the frontend needs.
+// Note: rating here is the MAL community score, never a user's personal rating.
 const formatAnime = (anime) => ({
   id:       anime.mal_id,
   title:    anime.title_english || anime.title,
   image:    anime.images?.jpg?.image_url || "",
-  // Always use the MAL community score — never overwrite with user rating
   rating:   anime.score ?? null,
   url:      anime.url,
   episodes: anime.episodes ?? null,
@@ -46,15 +52,15 @@ const formatAnime = (anime) => ({
   genres:   (anime.genres  || []).map(g => g.name)
 });
 
-// Auto-save helper — called whenever a user sets a status so they don't need
-// to click "Save to Profile" separately
+// Silently saves an anime to the user's list when they set a watch status,
+// so they don't have to hit a separate "Save" button. Skips if already saved.
 const autoSave = (username, anime) => {
   if (!username || !anime?.id) return;
   db.get(
     `SELECT id FROM saved_anime WHERE username = ? AND animeId = ?`,
     [username, anime.id],
     (err, existing) => {
-      if (err || existing) return; // already saved or error — skip
+      if (err || existing) return;
       db.run(
         `INSERT INTO saved_anime (username, animeId, title, image, url, genres, episodes, type, malScore)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -67,10 +73,10 @@ const autoSave = (username, anime) => {
   );
 };
 
-// ---- ROOT ----
 app.get("/", (req, res) => res.send("AniMatch backend is running!"));
 
-// ---- SIGNUP ----
+// Creates a new user. All fields are required, and we hash the password
+// before storing it — never save plaintext passwords.
 app.post("/signup", async (req, res) => {
   const { username, email, age, gender, password } = req.body;
   if (!username || !email || !age || !gender || !password)
@@ -89,7 +95,9 @@ app.post("/signup", async (req, res) => {
   );
 });
 
-// ---- LOGIN ----
+// Looks up the user by username, then uses bcrypt to compare the submitted
+// password against the stored hash. Returns a generic error either way so
+// we don't leak whether the username exists.
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
   db.get(`SELECT * FROM users WHERE username = ?`, [username], async (err, user) => {
@@ -101,25 +109,26 @@ app.post("/login", async (req, res) => {
   });
 });
 
-// ---- FORGOT PASSWORD — generates a reset token ----
+// Generates a one-time reset token tied to the user's account.
+// We always return a success message even if the email isn't found —
+// this prevents attackers from probing which emails are registered.
 app.post("/forgot-password", (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ message: "Email required." });
 
   db.get(`SELECT username FROM users WHERE email = ?`, [email], (err, user) => {
     if (err)   return res.status(500).json({ message: "Database error." });
-    // Always return success even if email not found (security best practice)
     if (!user) return res.json({ message: "If that email exists, a reset link has been generated." });
 
     const token     = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 1000 * 60 * 60).toISOString(); // 1 hour
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60).toISOString(); // expires in 1 hour
 
     db.run(
       `INSERT INTO password_resets (username, token, expiresAt, used) VALUES (?, ?, ?, 0)`,
       [user.username, token, expiresAt],
       function (err2) {
         if (err2) return res.status(500).json({ message: "Could not create reset token." });
-        // In production you'd email this. For now, return it so the user can use it directly.
+        // In a real app you'd email this link. For now we return it directly so you can test it.
         res.json({
           message: "Reset token generated!",
           resetToken: token,
@@ -131,7 +140,8 @@ app.post("/forgot-password", (req, res) => {
   });
 });
 
-// ---- RESET PASSWORD ----
+// Validates the token, checks it hasn't expired or been used, then
+// updates the password and marks the token as consumed so it can't be reused.
 app.post("/reset-password", async (req, res) => {
   const { token, newPassword } = req.body;
   if (!token || !newPassword) return res.status(400).json({ message: "Token and new password required." });
@@ -156,7 +166,8 @@ app.post("/reset-password", async (req, res) => {
   );
 });
 
-// ---- DASHBOARD ----
+// Returns basic profile info for the dashboard. Recommendations are
+// handled separately so this stays fast.
 app.get("/dashboard/:username", (req, res) => {
   const { username } = req.params;
   db.get(`SELECT username, email, age, gender FROM users WHERE username = ?`, [username], (err, user) => {
@@ -166,7 +177,6 @@ app.get("/dashboard/:username", (req, res) => {
   });
 });
 
-// ---- SAVED ANIME ----
 app.get("/saved-anime/:username", (req, res) => {
   const { username } = req.params;
   db.all(`SELECT * FROM saved_anime WHERE username = ?`, [username], (err, rows) => {
@@ -175,7 +185,9 @@ app.get("/saved-anime/:username", (req, res) => {
   });
 });
 
-// ---- ANIME STATUS (single card) ----
+// Fetches watch status, personal rating, episode progress, and notes for
+// a single anime card. Four separate queries because the data lives in
+// four separate tables.
 app.get("/anime-status/:username/:animeId", (req, res) => {
   const { username, animeId } = req.params;
   db.get(`SELECT status, updatedAt FROM watch_status WHERE username = ? AND animeId = ?`, [username, animeId], (err, watchRow) => {
@@ -198,7 +210,9 @@ app.get("/anime-status/:username/:animeId", (req, res) => {
   });
 });
 
-// ---- ALL STATUS (watchlist) ----
+// Joins all four status tables in a single query so the watchlist page
+// doesn't need to fire per-card requests. Much faster than anime-status
+// when you're loading a full list.
 app.get("/all-status/:username", (req, res) => {
   const { username } = req.params;
   db.all(
@@ -224,7 +238,9 @@ app.get("/all-status/:username", (req, res) => {
   );
 });
 
-// ---- USER STATS ----
+// Aggregates the user's library into summary numbers shown on the dashboard.
+// The genre query runs separately because it needs to parse JSON arrays stored
+// in the genres column, and SQLite doesn't have a native JSON_EACH in all versions.
 app.get("/user-stats/:username", (req, res) => {
   const { username } = req.params;
   db.get(
@@ -246,6 +262,7 @@ app.get("/user-stats/:username", (req, res) => {
           genreRows.forEach(r => {
             try { JSON.parse(r.genres).forEach(g => { counts[g] = (counts[g] || 0) + 1; }); } catch (e) {}
           });
+          // Pick whichever genre appears most across the user's saved anime
           topGenre = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
         }
         res.json({
@@ -260,7 +277,9 @@ app.get("/user-stats/:username", (req, res) => {
   );
 });
 
-// ---- REMOVE ANIME ----
+// Removes an anime and all its associated data (status, rating, progress, notes)
+// from every table. The deletes are fire-and-forget except for the last one,
+// which is where we send the response.
 app.delete("/remove-anime", (req, res) => {
   const { username, animeId } = req.body;
   if (!username || !animeId) return res.status(400).json({ message: "Missing data." });
@@ -276,12 +295,11 @@ app.delete("/remove-anime", (req, res) => {
   );
 });
 
-// ---- SEARCH ----
 app.get("/search", async (req, res) => {
   try {
     const query = req.query.q;
     if (!query) return res.status(400).json({ error: "Search query required" });
-    await delay(300);
+    await delay(300); // small pause to be polite to the Jikan API
     const data = await fetchJikan("https://api.jikan.moe/v4/anime", { q: query, limit: 12 });
     res.json(data.data.map(formatAnime));
   } catch (error) {
@@ -290,12 +308,21 @@ app.get("/search", async (req, res) => {
   }
 });
 
-// ---- RECOMMENDATIONS ----
+// Builds a recommendation pool from multiple sources: genre-based queries,
+// mood keywords, seed anime recommendations, and the current airing season.
+// Everything gets deduplicated and scored before we return the top results.
 app.post("/recommend", async (req, res) => {
   const { genres = [], maxEpisodes, hiddenGem, mood, seedAnimeId, seedAnimeTitle } = req.body;
+
+  // Maps genre names to Jikan's internal genre IDs
   const genreMap = { Action:1, Adventure:2, Comedy:4, Drama:8, Fantasy:10, Romance:22, Horror:14, SciFi:24 };
+
+  // If the user picked a mood, we expand their genre list automatically
   const moodBoost = { Excited:["Action","Adventure"], Chill:["Comedy","Fantasy"], Adventurous:["Action","Fantasy","Adventure"], Romantic:["Romance","Drama"], Sad:["Drama","Romance"], Comedic:["Comedy"] };
+
+  // Additional search terms that go with each mood
   const moodKeywords = { Excited:["epic battle","tournament","shounen"], Chill:["slice of life","iyashikei","healing"], Adventurous:["adventure quest","journey","isekai"], Romantic:["love story","romance","shoujo"], Sad:["tragedy","emotional","tearjerker"], Comedic:["comedy","gag","parody"] };
+
   const ALLOWED_TYPES = ["TV","ONA","OVA"];
 
   try {
@@ -303,6 +330,8 @@ app.post("/recommend", async (req, res) => {
     if (mood && moodBoost[mood]) finalGenres = [...new Set([...finalGenres, ...moodBoost[mood]])];
     if (finalGenres.length === 0) finalGenres = ["Action"];
 
+    // Pull two pages per genre: one sorted by score, one by popularity.
+    // Randomizing the page number adds variety so you don't see the same results every time.
     for (const g of finalGenres) {
       const genreId = genreMap[g];
       if (!genreId) continue;
@@ -314,12 +343,14 @@ app.post("/recommend", async (req, res) => {
       } catch (e) {}
     }
 
+    // Add keyword-based results for the selected mood
     if (mood && moodKeywords[mood]) {
       for (const kw of shuffle(moodKeywords[mood]).slice(0, 2)) {
         try { const d = await fetchJikan("https://api.jikan.moe/v4/anime", { q: kw, limit: 15, order_by: "score", sort: "desc", type: "tv" }); pool.push(...(d.data || [])); await delay(500); } catch (e) {}
       }
     }
 
+    // If a seed anime was provided, fetch what MAL recommends based on it
     const processSeedRecs = async (seedId) => {
       try {
         const d = await fetchJikan(`https://api.jikan.moe/v4/anime/${seedId}/recommendations`);
@@ -331,20 +362,26 @@ app.post("/recommend", async (req, res) => {
 
     if (seedAnimeId) await processSeedRecs(seedAnimeId);
     if (seedAnimeTitle && !seedAnimeId) {
+      // If we only have a title, search for it first to get the ID, then pull its recs
       try {
         const d = await fetchJikan("https://api.jikan.moe/v4/anime", { q: seedAnimeTitle, limit: 1 });
         if (d.data?.[0]) await processSeedRecs(d.data[0].mal_id);
       } catch (e) {}
     }
 
+    // Toss in currently airing anime for freshness
     try { const s = await fetchJikan("https://api.jikan.moe/v4/seasons/now", { limit: 20 }); pool.push(...(s.data || [])); } catch (e) {}
 
     let filtered = dedupe(pool)
       .filter(a => ALLOWED_TYPES.includes((a.type || "").toUpperCase()) || !a.type)
       .filter(a => a.score && a.score >= 6.5);
     if (maxEpisodes) filtered = filtered.filter(a => !a.episodes || a.episodes <= maxEpisodes);
+
+    // Hidden gem mode: must be well-rated but not widely known (low member count)
     if (hiddenGem) filtered = filtered.filter(a => a.score >= 7.2 && (a.members || 0) < 400000);
 
+    // Boost highly-rated shows, then add a small random factor so the list
+    // feels different on each request rather than always returning the same order.
     const scored = filtered.map(anime => {
       let score = anime.score || 0;
       if (anime.score >= 8.5) score += 2;
@@ -353,6 +390,7 @@ app.post("/recommend", async (req, res) => {
       return { anime, score };
     }).sort((a, b) => b.score - a.score);
 
+    // Shuffle the top 20 to mix things up, then append the rest in order
     const candidates = scored.slice(0, 40);
     const final = [...shuffle(candidates.slice(0, 20)), ...candidates.slice(20)];
     res.json(final.slice(0, 15).map(({ anime }) => formatAnime(anime)));
@@ -362,7 +400,9 @@ app.post("/recommend", async (req, res) => {
   }
 });
 
-// ---- PERSONALIZED RECS ----
+// Generates recommendations tailored to what the user has already saved.
+// Prioritizes anime they rated 7 or higher as seeds. Falls back to the
+// full saved list if nothing is rated yet.
 app.get("/personalized-recs/:username", async (req, res) => {
   const { username } = req.params;
   try {
@@ -378,7 +418,7 @@ app.get("/personalized-recs/:username", async (req, res) => {
       try {
         const data = await fetchJikan(`https://api.jikan.moe/v4/anime/${seed.animeId}/recommendations`);
         for (const entry of (data.data || []).slice(0, 5)) {
-          if (savedIds.has(entry.entry.mal_id)) continue;
+          if (savedIds.has(entry.entry.mal_id)) continue; // skip things they already have
           try { const detail = await fetchJikan(`https://api.jikan.moe/v4/anime/${entry.entry.mal_id}`); if (detail.data) pool.push({ ...detail.data, _seedTitle: seed.title }); await delay(350); } catch (e) {}
         }
         await delay(500);
@@ -391,7 +431,6 @@ app.get("/personalized-recs/:username", async (req, res) => {
   }
 });
 
-// ---- SAVE ANIME ----
 app.post("/save-anime", (req, res) => {
   const { username, anime } = req.body;
   if (!username || !anime) return res.status(400).json({ message: "Missing data." });
@@ -410,14 +449,14 @@ app.post("/save-anime", (req, res) => {
   });
 });
 
-// ---- WATCH STATUS — auto-saves anime to list if not already there ----
+// Updates the user's watch status for an anime. Also triggers autoSave so the
+// anime shows up in their list even if they never manually saved it first.
 app.post("/watch-status", (req, res) => {
   const { username, animeId, status, anime } = req.body;
   const valid = ["none","watching","completed","rewatching"];
   if (!username || animeId === undefined) return res.status(400).json({ message: "Missing data." });
   if (!valid.includes(status)) return res.status(400).json({ message: "Invalid status." });
 
-  // Auto-save to profile when user sets any status
   if (anime) autoSave(username, anime);
 
   db.run(
@@ -431,7 +470,8 @@ app.post("/watch-status", (req, res) => {
   );
 });
 
-// ---- RATE ANIME ----
+// Ratings are stored as half-point increments (0.5–10). We round here so
+// values like 7.3 don't sneak in through the API.
 app.post("/rate-anime", (req, res) => {
   const { username, animeId, rating } = req.body;
   if (!username || animeId === undefined || rating === undefined) return res.status(400).json({ message: "Missing data." });
@@ -448,7 +488,6 @@ app.post("/rate-anime", (req, res) => {
   );
 });
 
-// ---- EPISODE PROGRESS ----
 app.post("/episode-progress", (req, res) => {
   const { username, animeId, currentEp } = req.body;
   if (!username || animeId === undefined || currentEp === undefined) return res.status(400).json({ message: "Missing data." });
@@ -462,7 +501,6 @@ app.post("/episode-progress", (req, res) => {
   );
 });
 
-// ---- ANIME NOTES ----
 app.post("/anime-note", (req, res) => {
   const { username, animeId, note } = req.body;
   if (!username || animeId === undefined) return res.status(400).json({ message: "Missing data." });
@@ -477,7 +515,9 @@ app.post("/anime-note", (req, res) => {
   );
 });
 
-// ---- FRIENDS — SEND REQUEST ----
+// Checks that the two users are actually friends before exposing anyone's watchlist.
+// The friend check queries both directions of the relationship since either person
+// could have been the one who sent the original request.
 app.post("/friends/request", (req, res) => {
   const { requester, receiver } = req.body;
   if (!requester || !receiver) return res.status(400).json({ message: "Missing data." });
@@ -501,7 +541,6 @@ app.post("/friends/request", (req, res) => {
   });
 });
 
-// ---- FRIENDS — ACCEPT ----
 app.post("/friends/accept", (req, res) => {
   const { requester, receiver } = req.body;
   db.run(
@@ -515,7 +554,8 @@ app.post("/friends/accept", (req, res) => {
   );
 });
 
-// ---- FRIENDS — DECLINE / REMOVE ----
+// Handles both declining a pending request and removing an existing friendship.
+// We check both directions so it doesn't matter who calls it.
 app.delete("/friends", (req, res) => {
   const { userA, userB } = req.body;
   db.run(
@@ -528,7 +568,9 @@ app.delete("/friends", (req, res) => {
   );
 });
 
-// ---- FRIENDS — LIST (friends + pending) ----
+// Returns all friend relationships for a user: accepted friends, sent requests,
+// and received requests. The direction field tells the frontend which pending
+// ones to show as incoming vs outgoing.
 app.get("/friends/:username", (req, res) => {
   const { username } = req.params;
   db.all(
@@ -546,16 +588,14 @@ app.get("/friends/:username", (req, res) => {
   );
 });
 
-// ---- FRIEND'S WATCHLIST (public view) ----
 app.get("/friends/:username/watchlist/:friendName", (req, res) => {
   const { username, friendName } = req.params;
 
-  // Verify they are actually friends
   db.get(
     `SELECT id FROM friends WHERE status = 'accepted' AND ((requester = ? AND receiver = ?) OR (requester = ? AND receiver = ?))`,
     [username, friendName, friendName, username],
     (err, friendship) => {
-      if (err)        return res.status(500).json({ message: "Database error." });
+      if (err)         return res.status(500).json({ message: "Database error." });
       if (!friendship) return res.status(403).json({ message: "You are not friends with this user." });
 
       db.all(
@@ -578,6 +618,5 @@ app.get("/friends/:username/watchlist/:friendName", (req, res) => {
   );
 });
 
-// ---- START ----
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

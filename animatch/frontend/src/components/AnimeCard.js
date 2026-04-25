@@ -3,8 +3,8 @@ import { useToast } from "./Toast";
 
 const API = "https://animatch-ofks.onrender.com";
 
-// FIX: cycle ends at 'none' so users can undo accidental clicks
-// none → watching → completed → rewatching → none
+// Status cycle order: none → watching → completed → rewatching → none
+// Each entry defines what the button looks like and what status comes next
 const STATUS_CONFIG = {
   none:       { label: "Add Status",    next: "watching",   color: "var(--text-dim)",  bg: "transparent",        border: "var(--border)" },
   watching:   { label: "Watching",      next: "completed",  color: "var(--teal)",       bg: "var(--teal-dim)",    border: "var(--teal)" },
@@ -12,6 +12,7 @@ const STATUS_CONFIG = {
   rewatching: { label: "Rewatching 🔄", next: "none",       color: "var(--yellow)",     bg: "var(--yellow-dim)",  border: "var(--yellow)" }
 };
 
+// Converts a UTC timestamp into a human-readable relative string like "3h ago"
 function timeAgo(dateStr) {
   if (!dateStr) return null;
   const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
@@ -23,8 +24,8 @@ function timeAgo(dateStr) {
 }
 
 function AnimeCard({ anime = {}, onSimilarClick, hideSimilar = false }) {
-  const animeId  = anime.id ?? anime.mal_id;
-  const toast    = useToast();
+  const animeId = anime.id ?? anime.mal_id;
+  const toast   = useToast();
 
   const [status, setStatus]           = useState("none");
   const [updatedAt, setUpdatedAt]     = useState(null);
@@ -34,15 +35,15 @@ function AnimeCard({ anime = {}, onSimilarClick, hideSimilar = false }) {
   const [note, setNote]               = useState("");
   const [noteOpen, setNoteOpen]       = useState(false);
   const [noteSaving, setNoteSaving]   = useState(false);
-  const noteTimer = useRef(null);
+  const noteTimer = useRef(null); // holds the debounce timeout for auto-saving notes
 
   const totalEps = anime.episodes ?? null;
 
-  // FIX: Always use MAL community score — never show user's personal rating here
-  // The malScore is stored when saving; for unsaved cards we use anime.rating directly
+  // Always display the MAL community score, never the user's personal rating.
+  // malScore takes priority; falls back to anime.rating only if it's a number.
   const malRating = anime.malScore ?? (typeof anime.rating === "number" ? anime.rating : null);
 
-  // ---- Load saved state ----
+  // On mount, fetch whatever status/rating/progress/note this user already has for this anime
   useEffect(() => {
     const username = localStorage.getItem("username");
     if (!username || !animeId) return;
@@ -51,17 +52,17 @@ function AnimeCard({ anime = {}, onSimilarClick, hideSimilar = false }) {
         const res  = await fetch(`${API}/anime-status/${username}/${animeId}`);
         if (!res.ok) return;
         const data = await res.json();
-        if (data.status)        setStatus(data.status);
-        if (data.updatedAt)     setUpdatedAt(data.updatedAt);
-        if (data.rating != null) { setRating(data.rating); setRatingInput(String(data.rating)); }
+        if (data.status)          setStatus(data.status);
+        if (data.updatedAt)       setUpdatedAt(data.updatedAt);
+        if (data.rating != null)  { setRating(data.rating); setRatingInput(String(data.rating)); }
         if (data.currentEp != null) setCurrentEp(data.currentEp);
-        if (data.note != null)  setNote(data.note);
+        if (data.note != null)    setNote(data.note);
       } catch (err) { console.warn("Could not load anime status:", err); }
     };
     load();
   }, [animeId]);
 
-  // ---- Save to profile ----
+  // Manually saves the anime to the user's profile list
   const handleSave = async () => {
     const username = localStorage.getItem("username");
     if (!username) { toast("You must be logged in.", "error"); return; }
@@ -79,17 +80,18 @@ function AnimeCard({ anime = {}, onSimilarClick, hideSimilar = false }) {
             genres:   anime.genres   || [],
             episodes: anime.episodes ?? null,
             type:     anime.type     ?? null,
-            malScore: malRating      ?? null   // store the MAL score separately
+            malScore: malRating      ?? null
           }
         })
       });
-      if (res.ok)              toast("Saved to your profile!", "success");
+      if (res.ok)                  toast("Saved to your profile!", "success");
       else if (res.status === 409) toast("Already in your list!", "info");
       else { const d = await res.json(); toast(d.message || "Save failed", "error"); }
     } catch (err) { toast("Network error saving anime", "error"); }
   };
 
-  // ---- Status cycle ----
+  // Advances the status to the next value in the cycle and persists it.
+  // Also passes the anime data along so the backend can auto-save it if needed.
   const handleStatusCycle = async () => {
     const newStatus = STATUS_CONFIG[status]?.next || "watching";
     setStatus(newStatus);
@@ -104,7 +106,6 @@ function AnimeCard({ anime = {}, onSimilarClick, hideSimilar = false }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username, animeId, status: newStatus,
-          // Pass anime data so backend can auto-save to profile
           anime: {
             id: animeId, title: anime.title, image: anime.image,
             url: anime.url, genres: anime.genres || [],
@@ -118,12 +119,14 @@ function AnimeCard({ anime = {}, onSimilarClick, hideSimilar = false }) {
     } catch (err) { console.error(err); }
   };
 
-  // ---- Rating ----
   const handleRatingInput = (e) => setRatingInput(e.target.value);
+
+  // Validates and rounds the rating when the user leaves the field.
+  // Reverts to the last saved value if the input is out of range.
   const handleRatingBlur = async () => {
     const val = parseFloat(ratingInput);
     if (isNaN(val) || val < 0.5 || val > 10) { setRatingInput(rating !== "" ? String(rating) : ""); return; }
-    const rounded = Math.round(val * 2) / 2;
+    const rounded = Math.round(val * 2) / 2; // snap to nearest 0.5
     setRating(rounded);
     setRatingInput(String(rounded));
     const username = localStorage.getItem("username");
@@ -137,17 +140,22 @@ function AnimeCard({ anime = {}, onSimilarClick, hideSimilar = false }) {
       if (res.ok) toast(`Rated ${rounded}/10!`, "success");
     } catch (err) { console.error(err); }
   };
+
+  // Let the user submit the rating with Enter instead of clicking away
   const handleRatingKeyDown = (e) => { if (e.key === "Enter") e.target.blur(); };
 
-  // ---- Episode progress ----
+  // Updates episode count, clamps it within valid bounds, and handles two
+  // automatic status transitions:
+  // - reaching the last episode sets status to "completed"
+  // - entering any episode from "none" sets status to "watching"
+  // Deliberately does NOT downgrade status when the count goes back down,
+  // since that's usually a correction rather than un-completing the show.
   const handleEpChange = async (e) => {
     const raw   = parseInt(e.target.value, 10);
     const value = isNaN(raw) ? 0 : Math.max(0, totalEps ? Math.min(raw, totalEps) : raw);
     setCurrentEp(value);
     const username = localStorage.getItem("username");
 
-    // FIX: only auto-complete going forward (reaching last ep)
-    // Never downgrade status when user corrects episode count backwards
     if (totalEps && value >= totalEps && status !== "completed" && status !== "rewatching") {
       setStatus("completed");
       setUpdatedAt(new Date().toISOString());
@@ -159,7 +167,6 @@ function AnimeCard({ anime = {}, onSimilarClick, hideSimilar = false }) {
         });
       }
     } else if (value > 0 && status === "none") {
-      // Auto-set to watching when they start tracking progress
       setStatus("watching");
       setUpdatedAt(new Date().toISOString());
       if (username) {
@@ -172,8 +179,6 @@ function AnimeCard({ anime = {}, onSimilarClick, hideSimilar = false }) {
         });
       }
     }
-    // NOTE: if value < totalEps and status is already 'completed', we leave it as-is
-    // The user completed it — reducing ep count is probably a correction, not un-completing
 
     if (!username) return;
     try {
@@ -184,7 +189,8 @@ function AnimeCard({ anime = {}, onSimilarClick, hideSimilar = false }) {
     } catch (err) { console.error(err); }
   };
 
-  // ---- Notes (auto-save with debounce) ----
+  // Saves the note 800ms after the user stops typing so we're not firing a
+  // request on every single keystroke
   const handleNoteChange = (e) => {
     const val = e.target.value;
     setNote(val);
@@ -211,11 +217,10 @@ function AnimeCard({ anime = {}, onSimilarClick, hideSimilar = false }) {
   return (
     <div className="am-anime-card">
 
-      {/* Image */}
       <a href={anime.url || "#"} target="_blank" rel="noreferrer" style={{ position: "relative", display: "block" }}>
         <img src={anime.image || ""} alt={anime.title || "Anime"} className="am-anime-card__img" />
 
-        {/* FIX: Always show MAL community rating — never N/A unless truly missing */}
+        {/* MAL community score badge — shows a dash if the score is genuinely missing */}
         <div style={{
           position: "absolute", top: "8px", right: "8px",
           background: "rgba(15,14,23,0.85)", border: "1px solid rgba(255,209,102,0.4)",
@@ -225,7 +230,7 @@ function AnimeCard({ anime = {}, onSimilarClick, hideSimilar = false }) {
           ★ {malRating != null ? malRating : "—"}
         </div>
 
-        {/* Status badge */}
+        {/* Watch status badge — only visible once the user has set a status */}
         {status !== "none" && (
           <div style={{
             position: "absolute", top: "8px", left: "8px",
@@ -242,18 +247,18 @@ function AnimeCard({ anime = {}, onSimilarClick, hideSimilar = false }) {
 
         <div className="am-anime-card__title">{anime.title || "Unknown Title"}</div>
         <div className="am-anime-card__meta">
-          {/* FIX: episodeLabel only says "? eps" when truly unknown */}
           <span className="am-anime-card__eps">📺 {episodeLabel}</span>
           {anime.type && <span style={{ color: "var(--text-dim)", fontSize: "11px" }}>{anime.type}</span>}
         </div>
 
+        {/* Only show the timestamp for actively in-progress shows */}
         {(status === "watching" || status === "rewatching") && ago && (
           <p style={{ fontSize: "10px", color: "var(--text-dim)", fontStyle: "italic", marginTop: "-2px" }}>
             Updated {ago}
           </p>
         )}
 
-        {/* Progress bar */}
+        {/* Progress bar — shown whenever we have episode data to display */}
         {(totalEps != null || currentEp > 0) && (
           <div className="am-progress-wrap">
             <div className="am-progress-label">
@@ -271,7 +276,7 @@ function AnimeCard({ anime = {}, onSimilarClick, hideSimilar = false }) {
           </div>
         )}
 
-        {/* Status cycle button */}
+        {/* Status cycle button — clicking it advances to the next status in the cycle */}
         <button onClick={handleStatusCycle} style={{
           marginTop: "8px", width: "100%", padding: "6px 10px",
           borderRadius: "var(--radius-sm)", fontSize: "12px", fontWeight: 700,
@@ -282,7 +287,7 @@ function AnimeCard({ anime = {}, onSimilarClick, hideSimilar = false }) {
           {statusCfg.label}
         </button>
 
-        {/* Personal rating */}
+        {/* Personal rating input — accepts any value 0.5–10, rounded to nearest 0.5 on blur */}
         <div style={{ marginTop: "6px", position: "relative" }}>
           <input
             type="text" inputMode="decimal"
@@ -306,7 +311,7 @@ function AnimeCard({ anime = {}, onSimilarClick, hideSimilar = false }) {
           </p>
         )}
 
-        {/* Notes toggle */}
+        {/* Notes section — collapsed by default, auto-saves while the user types */}
         <button
           onClick={() => setNoteOpen(o => !o)}
           className="am-btn am-btn-ghost am-btn-full am-btn-sm"
@@ -326,17 +331,16 @@ function AnimeCard({ anime = {}, onSimilarClick, hideSimilar = false }) {
               className="am-input"
               style={{ resize: "vertical", lineHeight: 1.5, fontSize: "12px" }}
             />
-            {noteSaving && <p style={{ fontSize: "10px", color: "var(--text-dim)", marginTop: "2px" }}>Saving...</p>}
+            {noteSaving  && <p style={{ fontSize: "10px", color: "var(--text-dim)", marginTop: "2px" }}>Saving...</p>}
             {!noteSaving && note && <p style={{ fontSize: "10px", color: "var(--teal)", marginTop: "2px" }}>✓ Saved</p>}
           </div>
         )}
 
-        {/* Save button */}
         <button onClick={handleSave} className="am-btn am-btn-coral am-btn-full am-btn-sm" style={{ marginTop: "8px" }}>
           ⭐ Save to Profile
         </button>
 
-        {/* Find Similar */}
+        {/* Only rendered on search/recommendations pages, not on the watchlist */}
         {!hideSimilar && onSimilarClick && (
           <button onClick={() => animeId && onSimilarClick(animeId)} className="am-btn am-btn-ghost am-btn-full am-btn-sm" style={{ marginTop: "5px" }}>
             Find Similar

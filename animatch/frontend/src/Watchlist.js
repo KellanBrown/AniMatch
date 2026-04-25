@@ -14,17 +14,18 @@ function Watchlist() {
     fetchWatchlist(username);
   }, []);
 
+  // Pulls everything from all-status in one shot. That endpoint joins all the
+  // related tables (watch status, ratings, episode progress, notes) so we
+  // don't need multiple requests per card.
   const fetchWatchlist = async (username) => {
     setLoading(true);
     try {
-      // all-status now returns episodes + type directly — no separate saved-anime fetch needed
       const res      = await fetch(`${API}/all-status/${username}`);
       const statuses = res.ok ? await res.json() : [];
 
       const merged = statuses.map(s => ({
         ...s,
         id:         s.animeId,
-        // episodes comes directly from saved_anime via the JOIN — FIX for "? eps"
         episodes:   s.episodes ?? null,
         type:       s.type     ?? null,
         userRating: s.rating   ?? null
@@ -38,7 +39,8 @@ function Watchlist() {
     setLoading(false);
   };
 
-  // Full remove (from All tab or explicit)
+  // Deletes an anime and all its data from the backend, then removes it from
+  // local state so the UI updates immediately without a re-fetch.
   const handleRemoveFull = async (animeId) => {
     const username = localStorage.getItem("username");
     try {
@@ -51,6 +53,7 @@ function Watchlist() {
     } catch (err) { console.error(err); }
   };
 
+  // Pre-compute tab counts so they stay in sync with the current list
   const counts = {
     all:        savedAnime.length,
     watching:   savedAnime.filter(a => a.status === "watching").length,
@@ -64,7 +67,7 @@ function Watchlist() {
     if (filter === "rewatching") return anime.status === "rewatching";
     if (filter === "completed")  return anime.status === "completed";
     if (filter === "none")       return anime.status === "none" || !anime.status;
-    return true;
+    return true; // "all" tab — no filter applied
   });
 
   const tabs = [
@@ -94,7 +97,6 @@ function Watchlist() {
         </p>
       </div>
 
-      {/* Filter tabs */}
       <div className="am-tabs" style={{ marginBottom: "24px", flexWrap: "wrap", gap: "6px" }}>
         {tabs.map(t => (
           <button
@@ -126,13 +128,9 @@ function Watchlist() {
         <div className="am-grid">
           {filtered.map(anime => (
             <div key={anime.animeId} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              {/*
-                hideSimilar=true — no Find Similar on profile cards
-                All episode data now comes from the DB so progress bar always shows
-              */}
+              {/* hideSimilar=true because "Find Similar" doesn't make sense in the context of your own list */}
               <AnimeCard anime={anime} hideSimilar={true} />
 
-              {/* Remove button — full delete */}
               <button
                 onClick={() => handleRemoveFull(anime.animeId)}
                 className="am-btn am-btn-red am-btn-sm am-btn-full"

@@ -3,6 +3,7 @@ import { useToast } from "./components/Toast";
 
 const API = "https://animatch-ofks.onrender.com";
 
+// Maps watch status keys to the display label and color used throughout the UI
 const STATUS_LABELS = {
   none:       { label: "—",            color: "var(--text-dim)" },
   watching:   { label: "Watching",     color: "var(--teal)" },
@@ -14,11 +15,11 @@ function Friends() {
   const username = localStorage.getItem("username");
   const toast    = useToast();
 
-  const [friends, setFriends]           = useState([]);
-  const [searchUser, setSearchUser]     = useState("");
-  const [loading, setLoading]           = useState(true);
-  const [viewingFriend, setViewingFriend] = useState(null);
-  const [friendList, setFriendList]     = useState([]);
+  const [friends, setFriends]             = useState([]);
+  const [searchUser, setSearchUser]       = useState("");
+  const [loading, setLoading]             = useState(true);
+  const [viewingFriend, setViewingFriend] = useState(null);   // which friend's watchlist is expanded
+  const [friendList, setFriendList]       = useState([]);
   const [friendListLoading, setFriendListLoading] = useState(false);
 
   useEffect(() => {
@@ -68,10 +69,12 @@ function Friends() {
         method: "DELETE", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userA: username, userB: friendName })
       });
+      // Also collapse the watchlist panel if we just removed the person we were viewing
       if (res.ok) { toast("Removed.", "info"); loadFriends(); if (viewingFriend === friendName) setViewingFriend(null); }
     } catch (err) { toast("Network error.", "error"); }
   };
 
+  // Toggles the watchlist panel for a friend. Clicking the same friend again collapses it.
   const viewWatchlist = async (friendName) => {
     if (viewingFriend === friendName) { setViewingFriend(null); return; }
     setViewingFriend(friendName);
@@ -84,6 +87,7 @@ function Friends() {
     setFriendListLoading(false);
   };
 
+  // Split the flat friends list into buckets so we can render each section separately
   const accepted  = friends.filter(f => f.status === "accepted");
   const pending   = friends.filter(f => f.status === "pending");
   const incoming  = pending.filter(f => f.direction === "received");
@@ -105,7 +109,6 @@ function Friends() {
         Connect with friends and see what they're watching!
       </p>
 
-      {/* Send friend request */}
       <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "20px", marginBottom: "28px" }}>
         <h3 style={{ marginBottom: "12px" }}>Add a Friend</h3>
         <form onSubmit={sendRequest} style={{ display: "flex", gap: "10px" }}>
@@ -126,7 +129,6 @@ function Friends() {
         <div className="am-loading">Loading friends...</div>
       ) : (
         <>
-          {/* Incoming requests */}
           {incoming.length > 0 && (
             <div style={{ marginBottom: "28px" }}>
               <h2 style={{ marginBottom: "12px" }}>
@@ -151,7 +153,6 @@ function Friends() {
             </div>
           )}
 
-          {/* Outgoing requests */}
           {outgoing.length > 0 && (
             <div style={{ marginBottom: "28px" }}>
               <h2 style={{ marginBottom: "12px" }}>Sent Requests</h2>
@@ -171,7 +172,6 @@ function Friends() {
             </div>
           )}
 
-          {/* Friends list */}
           <div>
             <h2 style={{ marginBottom: "12px" }}>
               My Friends <span style={{ color: "var(--teal)", fontSize: "14px" }}>({accepted.length})</span>
@@ -188,10 +188,12 @@ function Friends() {
                   <div style={{
                     display: "flex", alignItems: "center", justifyContent: "space-between",
                     background: "var(--surface)", border: `1px solid ${viewingFriend === f.friendName ? "var(--purple)" : "var(--border)"}`,
+                    // Round only the top corners when the panel below is open
                     borderRadius: viewingFriend === f.friendName ? "var(--radius-lg) var(--radius-lg) 0 0" : "var(--radius-lg)",
                     padding: "14px 18px", transition: "border-color 0.2s"
                   }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      {/* Avatar is just the first letter of the username */}
                       <div style={{
                         width: "38px", height: "38px", borderRadius: "50%",
                         background: "var(--purple-dim)", border: "2px solid var(--purple)",
@@ -213,7 +215,6 @@ function Friends() {
                     </div>
                   </div>
 
-                  {/* Friend's watchlist panel */}
                   {viewingFriend === f.friendName && (
                     <div style={{
                       background: "var(--surface2)", border: "1px solid var(--purple)",
@@ -245,6 +246,7 @@ function Friends() {
                                     <div style={{ fontWeight: 700, fontSize: "13px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{anime.title}</div>
                                     <div style={{ display: "flex", gap: "10px", marginTop: "2px" }}>
                                       <span style={{ fontSize: "11px", color: sc.color, fontWeight: 700 }}>{sc.label}</span>
+                                      {/* Only show episode progress if we actually have data for both fields */}
                                       {anime.episodes && anime.currentEp > 0 && (
                                         <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>Ep {anime.currentEp}/{anime.episodes}</span>
                                       )}

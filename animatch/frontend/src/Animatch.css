@@ -1,11 +1,8 @@
-/* ============================================================
-   AniMatch — Global Design System
-   Import this in index.js: import './animatch.css';
-   ============================================================ */
-
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Rajdhani:wght@600;700&display=swap');
 
-/* ---- CSS Variables ---- */
+/* Nunito is used for body text and UI elements.
+   Rajdhani is the display font used for headings and the logo. */
+
 :root {
   --bg:         #0f0e17;
   --surface:    #1a1828;
@@ -32,7 +29,6 @@
   --radius-xl:  24px;
 }
 
-/* ---- Base Reset ---- */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -44,7 +40,6 @@ body {
   min-height: 100vh;
 }
 
-/* ---- Typography ---- */
 h1, h2, h3 {
   font-family: 'Rajdhani', sans-serif;
   letter-spacing: 0.03em;
@@ -57,7 +52,6 @@ p  { color: var(--text-muted); }
 a  { color: var(--purple); text-decoration: none; }
 a:hover { color: var(--coral); }
 
-/* ---- Layout ---- */
 .am-page {
   min-height: 100vh;
   padding: 28px 24px;
@@ -65,17 +59,15 @@ a:hover { color: var(--coral); }
   margin: 0 auto;
 }
 
-/* ---- Logo ---- */
 .am-logo {
   font-family: 'Rajdhani', sans-serif;
   font-size: 1.8rem;
   font-weight: 700;
   letter-spacing: 0.05em;
 }
-.am-logo .ani  { color: var(--coral); }
+.am-logo .ani   { color: var(--coral); }
 .am-logo .match { color: var(--teal); }
 
-/* ---- Buttons ---- */
 .am-btn {
   display: inline-flex;
   align-items: center;
@@ -91,11 +83,13 @@ a:hover { color: var(--coral); }
   transition: transform 0.15s, opacity 0.15s, background 0.15s;
   white-space: nowrap;
 }
-.am-btn:active { transform: scale(0.97); }
+.am-btn:active { transform: scale(0.97); }  /* subtle press feedback */
 
 .am-btn-coral  { background: var(--coral); color: #fff; }
 .am-btn-coral:hover  { opacity: 0.88; }
 
+/* Teal/purple/red buttons use a dimmed background with a colored border
+   so they're less visually heavy than the solid coral button */
 .am-btn-teal   { background: var(--teal-dim); color: var(--teal); border: 1px solid rgba(0,229,192,0.3); }
 .am-btn-teal:hover   { background: rgba(0,229,192,0.22); }
 
@@ -108,10 +102,9 @@ a:hover { color: var(--coral); }
 .am-btn-ghost  { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
 .am-btn-ghost:hover  { border-color: var(--border-hover); color: var(--text); }
 
-.am-btn-sm { padding: 6px 12px; font-size: 12px; }
+.am-btn-sm   { padding: 6px 12px; font-size: 12px; }
 .am-btn-full { width: 100%; }
 
-/* ---- Cards ---- */
 .am-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -124,7 +117,6 @@ a:hover { color: var(--coral); }
   transform: translateY(-2px);
 }
 
-/* ---- Anime Card ---- */
 .am-anime-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -149,7 +141,7 @@ a:hover { color: var(--coral); }
   display: flex;
   flex-direction: column;
   gap: 6px;
-  flex: 1;
+  flex: 1;  /* stretches to fill the card so buttons align at the bottom */
 }
 .am-anime-card__title {
   font-family: 'Nunito', sans-serif;
@@ -167,7 +159,6 @@ a:hover { color: var(--coral); }
 .am-anime-card__rating { color: var(--yellow); font-weight: 700; }
 .am-anime-card__eps    { color: var(--text-muted); }
 
-/* ---- Stat Boxes ---- */
 .am-stats {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
@@ -195,12 +186,12 @@ a:hover { color: var(--coral); }
   text-transform: uppercase;
   color: var(--text-dim);
 }
+/* Color modifier classes — just swap the value color, everything else stays the same */
 .am-stat--coral  .am-stat__val { color: var(--coral); }
 .am-stat--teal   .am-stat__val { color: var(--teal); }
 .am-stat--yellow .am-stat__val { color: var(--yellow); }
 .am-stat--purple .am-stat__val { color: var(--purple); }
 
-/* ---- Genre Pills ---- */
 .am-pills { display: flex; flex-wrap: wrap; gap: 7px; }
 .am-pill {
   padding: 6px 15px;
@@ -215,11 +206,11 @@ a:hover { color: var(--coral); }
   transition: all 0.15s;
 }
 .am-pill:hover { border-color: var(--border-hover); color: var(--text); }
+/* Active variants let the parent decide which color scheme to use */
 .am-pill.active-coral  { background: var(--coral); color: #fff; border-color: var(--coral); }
 .am-pill.active-teal   { background: var(--teal); color: #0f0e17; border-color: var(--teal); }
 .am-pill.active-purple { background: var(--purple); color: #fff; border-color: var(--purple); }
 
-/* ---- Filter Tabs ---- */
 .am-tabs { display: flex; gap: 6px; }
 .am-tab {
   padding: 7px 16px;
@@ -233,10 +224,9 @@ a:hover { color: var(--coral); }
   font-family: 'Nunito', sans-serif;
   transition: all 0.15s;
 }
-.am-tab:hover   { border-color: var(--border-hover); color: var(--text); }
-.am-tab.active  { background: var(--surface2); border-color: var(--purple); color: var(--purple); }
+.am-tab:hover  { border-color: var(--border-hover); color: var(--text); }
+.am-tab.active { background: var(--surface2); border-color: var(--purple); color: var(--purple); }
 
-/* ---- Inputs ---- */
 .am-input {
   background: var(--surface2);
   border: 1px solid var(--border);
@@ -254,7 +244,8 @@ a:hover { color: var(--coral); }
 }
 .am-input::placeholder { color: var(--text-dim); }
 
-/* ---- Toggle (watched checkbox) ---- */
+/* Custom checkbox styled as a sliding toggle.
+   We hide the native appearance and use ::after as the thumb. */
 .am-toggle-row {
   display: flex;
   align-items: center;
@@ -289,7 +280,7 @@ a:hover { color: var(--coral); }
   border-color: var(--teal);
 }
 .am-toggle:checked::after {
-  transform: translateX(16px);
+  transform: translateX(16px);  /* slides the thumb to the right */
   background: var(--teal);
 }
 .am-toggle-label {
@@ -298,9 +289,9 @@ a:hover { color: var(--coral); }
   color: var(--text-muted);
   transition: color 0.2s;
 }
+/* The label sits right after the toggle in the DOM, so we can target it with + */
 .am-toggle:checked + .am-toggle-label { color: var(--teal); }
 
-/* ---- Progress Bar (episode tracking) ---- */
 .am-progress-wrap {
   margin-top: 6px;
 }
@@ -312,7 +303,7 @@ a:hover { color: var(--coral); }
   color: var(--text-dim);
   margin-bottom: 4px;
 }
-.am-progress-label span:last-child { color: var(--coral); }
+.am-progress-label span:last-child { color: var(--coral); }  /* current episode number */
 .am-progress-bar {
   width: 100%;
   height: 5px;
@@ -324,7 +315,7 @@ a:hover { color: var(--coral); }
   height: 100%;
   background: linear-gradient(90deg, var(--coral), var(--purple));
   border-radius: 3px;
-  transition: width 0.3s ease;
+  transition: width 0.3s ease;  /* animates when the episode count changes */
 }
 .am-progress-input {
   display: flex;
@@ -354,7 +345,6 @@ a:hover { color: var(--coral); }
   font-weight: 700;
 }
 
-/* ---- Section header ---- */
 .am-section-header {
   display: flex;
   align-items: center;
@@ -362,7 +352,6 @@ a:hover { color: var(--coral); }
   margin-bottom: 16px;
 }
 
-/* ---- Nav bar ---- */
 .am-nav {
   display: flex;
   align-items: center;
@@ -372,21 +361,19 @@ a:hover { color: var(--coral); }
   margin-bottom: 10px;
   border-bottom: 1px solid var(--border);
 }
-.am-nav .am-logo { margin-right: auto; }
+.am-nav .am-logo { margin-right: auto; }  /* pushes nav buttons to the right */
 
-/* ---- Grid ---- */
+/* auto-fill lets the grid add columns as space allows without us specifying a count */
 .am-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 18px;
 }
 
-/* ---- Messages ---- */
-.am-msg-success { font-size: 11px; font-weight: 700; color: var(--teal); margin-top: 4px; }
+.am-msg-success { font-size: 11px; font-weight: 700; color: var(--teal);   margin-top: 4px; }
 .am-msg-info    { font-size: 11px; font-weight: 700; color: var(--purple); margin-top: 4px; }
-.am-msg-error   { font-size: 11px; font-weight: 700; color: var(--red); margin-top: 4px; }
+.am-msg-error   { font-size: 11px; font-weight: 700; color: var(--red);    margin-top: 4px; }
 
-/* ---- Empty state ---- */
 .am-empty {
   text-align: center;
   padding: 48px 24px;
@@ -394,7 +381,6 @@ a:hover { color: var(--coral); }
 }
 .am-empty h3 { color: var(--text-dim); margin-bottom: 8px; font-size: 1.1rem; }
 
-/* ---- Loading ---- */
 .am-loading {
   text-align: center;
   padding: 60px 24px;
@@ -403,7 +389,6 @@ a:hover { color: var(--coral); }
   letter-spacing: 0.05em;
 }
 
-/* ---- Quiz ---- */
 .am-quiz-wrap {
   max-width: 540px;
   margin: 60px auto;
@@ -422,8 +407,8 @@ a:hover { color: var(--coral); }
   background: var(--surface3);
   transition: background 0.2s;
 }
-.am-quiz-dot.done    { background: var(--teal); }
-.am-quiz-dot.current { background: var(--coral); }
+.am-quiz-dot.done    { background: var(--teal); }    /* completed step */
+.am-quiz-dot.current { background: var(--coral); }   /* active step */
 .am-quiz-q {
   font-family: 'Rajdhani', sans-serif;
   font-size: 1.7rem;
@@ -455,7 +440,6 @@ a:hover { color: var(--coral); }
   transform: translateY(-2px);
 }
 
-/* ---- Auth pages ---- */
 .am-auth-wrap {
   max-width: 420px;
   margin: 80px auto;
@@ -487,7 +471,6 @@ a:hover { color: var(--coral); }
   margin-bottom: 5px;
 }
 
-/* ---- Scrollbar ---- */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 3px; }
